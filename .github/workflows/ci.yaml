@@ -2,9 +2,123 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to checkout when manually running the workflow. Uses github.ref if unspecified.
+        type: string
+        default: ''
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+  CARGO_PROFILE: ci
+  GIT_CHECKOUT_REF: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+  RUSTFLAGS: -D warnings
+  RUST_VERSION: "stable"
 
 jobs:
-  hello:
+  cargo-deny:
     runs-on: ubuntu-latest
     steps:
-      - run: echo 'Hello world'
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.GIT_CHECKOUT_REF }}
+
+      - uses: EmbarkStudios/cargo-deny-action@34899fc7ba81ca6268d5947a7a16b4649013fea1
+        with:
+          command: check advisories bans licenses sources
+
+  check-for-unused-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.GIT_CHECKOUT_REF }}
+
+      - name: Check Cache
+        uses: Swatinem/rust-cache@27b8ea9368cf428f0bfe41b0876b1a7e809d9844
+
+      - name: Setup Cargo Machete
+        run: cargo install --locked cargo-machete --version ^0.6
+
+      - name: Check for Unused Dependencies
+        run: cargo machete
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.GIT_CHECKOUT_REF }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@c5a29ddb4d9d194e7c84ec8c3fba61b1c31fee8c
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Check Cache
+        uses: Swatinem/rust-cache@27b8ea9368cf428f0bfe41b0876b1a7e809d9844
+
+      - name: Build Docs
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --profile ${{ env.CARGO_PROFILE }} --workspace --no-deps
+
+  lint-and-format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.GIT_CHECKOUT_REF }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@c5a29ddb4d9d194e7c84ec8c3fba61b1c31fee8c
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy
+
+      - name: Copyright and License Check
+        run: ./.github/scripts/check_copyright_license.sh
+
+      - name: Check Formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        run: cargo clippy --profile ${{ env.CARGO_PROFILE }} --all-targets --all-features
+
+  test:
+    strategy:
+      matrix:
+        os:
+          # MacOS on Intel architecture
+          - macos-13
+          - macos-latest
+          - ubuntu-24.04-arm
+          - ubuntu-latest
+          - windows-latest
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.GIT_CHECKOUT_REF }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@c5a29ddb4d9d194e7c84ec8c3fba61b1c31fee8c
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Check Cache
+        uses: Swatinem/rust-cache@27b8ea9368cf428f0bfe41b0876b1a7e809d9844
+
+      - name: Test
+        run: cargo test --profile ${{ env.CARGO_PROFILE }}

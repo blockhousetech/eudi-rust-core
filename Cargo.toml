@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = ["stub"]
+
+[profile.ci]
+inherits = "dev"
+debug = false
