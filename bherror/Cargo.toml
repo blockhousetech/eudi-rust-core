@@ -17,3 +17,6 @@ serde_json = "1.0.105"
 
 [features]
 axum = ["dep:axum"]
+
+[package.metadata.docs.rs]
+all-features = true

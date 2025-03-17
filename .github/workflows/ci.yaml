@@ -69,7 +69,7 @@ jobs:
         uses: Swatinem/rust-cache@27b8ea9368cf428f0bfe41b0876b1a7e809d9844
 
       - name: Build Docs
-        run: RUSTDOCFLAGS="-D warnings" cargo doc --profile ${{ env.CARGO_PROFILE }} --workspace --no-deps
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --all-features --profile ${{ env.CARGO_PROFILE }} --workspace --no-deps
 
   lint-and-format:
     runs-on: ubuntu-latest
@@ -121,4 +121,4 @@ jobs:
         uses: Swatinem/rust-cache@27b8ea9368cf428f0bfe41b0876b1a7e809d9844
 
       - name: Test
-        run: cargo test --profile ${{ env.CARGO_PROFILE }}
+        run: cargo test --all-features --profile ${{ env.CARGO_PROFILE }}
