@@ -19,14 +19,18 @@ allow = [
 ]
 
 exceptions = [
-    # We publish `bherror` under AGPLv3
+    # We publish our crates under AGPLv3
     { crate = "bherror", allow = ["AGPL-3.0"] },
+    { crate = "bhx5chain", allow = ["AGPL-3.0"] },
 ]
 
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
-ignore = []
+ignore = [
+    # unmaintained
+    "RUSTSEC-2024-0370", # `proc-macro-error`, possibly introduced by `iref v3.2.2`
+]
 
 [bans]
 multiple-versions = "allow"

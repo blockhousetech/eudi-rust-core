@@ -1,0 +1,22 @@
+[package]
+name = "bhx5chain"
+version = "0.1.0"
+authors = ["TBTL Tech <tech@tbtl.com>"]
+categories = ["cryptography"]
+description = "TBTL's library for handling X.509 certificate chains."
+edition = "2021"
+keywords = ["certificate", "tbtl", "x509", "x509chain", "x5chain"]
+license-file = "../COPYING"
+readme = "README.md"
+repository = "https://github.com/blockhousetech/eudi-rust-core"
+
+[dependencies]
+bherror = "0.1"
+iref = "3.2"
+openssl = "0.10"
+rand = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+strum_macros = "0.27"
+
+[features]
+test-utils = []
