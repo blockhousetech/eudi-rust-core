@@ -132,9 +132,13 @@ jobs:
           - macos-latest
           - ubuntu-24.04-arm
           - ubuntu-latest
-          - windows-latest
+          - windows-2025
       fail-fast: false
     runs-on: ${{ matrix.os }}
+    env:
+        # OpenSSL installation settings for Windows runners
+        X86_64_PC_WINDOWS_MSVC_OPENSSL_LIB_DIR: C:\Program Files\OpenSSL\lib\VC\x64\MD
+        X86_64_PC_WINDOWS_MSVC_OPENSSL_INCLUDE_DIR: C:\Program Files\OpenSSL\include
     steps:
       - name: Checkout
         uses: actions/checkout@v4
