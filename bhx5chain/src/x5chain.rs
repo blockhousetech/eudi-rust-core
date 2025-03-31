@@ -247,7 +247,7 @@ impl TryFrom<JwtX5Chain> for X5Chain {
             .map(|base64_der| base64::decode_block(base64_der).foreign_err(|| Error::X5Chain))
             .collect::<bherror::Result<_, _>>()?;
 
-        // TODO(EUDI-1074): Check trusted root certificate
+        // TODO(issues/10): Check trusted root certificate
         X5Chain::from_raw_bytes(der_certs)
     }
 }
