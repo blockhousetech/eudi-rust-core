@@ -20,6 +20,7 @@ allow = [
 
 exceptions = [
     # We publish our crates under AGPLv3
+    { crate = "bh-jws-utils", allow = ["AGPL-3.0"] },
     { crate = "bherror", allow = ["AGPL-3.0"] },
     { crate = "bhx5chain", allow = ["AGPL-3.0"] },
 ]
