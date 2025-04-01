@@ -24,6 +24,7 @@ on:
         type: choice
         options:
           - all
+          - bh-jws-utils
           - bherror
           - bhx5chain
 

@@ -7,6 +7,7 @@ on:
         description: Rust crate to publish
         type: choice
         options:
+          - bh-jws-utils
           - bherror
           - bhx5chain
       version:
