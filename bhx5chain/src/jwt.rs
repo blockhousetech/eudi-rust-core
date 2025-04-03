@@ -16,7 +16,7 @@
 use openssl::base64;
 use serde::{Deserialize, Serialize};
 
-use crate::X5Chain;
+use crate::{Error, Result, X5Chain};
 
 /// [`X5Chain`] helper struct for working with JSON Web Token (JWT).
 ///
@@ -27,8 +27,8 @@ use crate::X5Chain;
 /// 7515][1] for details on `x5c`.  An example of X.509 certificate chain can be found in [JWS RFC
 /// 7515: Appendix B][2].
 ///
-/// NOTE: All `x5chain` manipulation should be done through [`X5Chain`]!  There are [`From`] and
-/// [`TryFrom`] implementations to convert between the two structures.
+/// NOTE: All `x5chain` manipulation should be done through [`X5Chain`]!  There are [`TryFrom`]
+/// implementations to convert between the two structures.
 ///
 /// [1]: <https://datatracker.ietf.org/doc/html/rfc7515#section-4.1.6>
 /// [2]: <https://datatracker.ietf.org/doc/html/rfc7515#appendix-B>
@@ -46,40 +46,21 @@ impl JwtX5Chain {
     /// Do NOT use this method for production code, but only tests.
     #[cfg(any(feature = "test-utils", test))]
     pub fn dummy() -> Self {
-        use openssl::x509::X509;
-
-        let cert = "-----BEGIN CERTIFICATE-----
-MIICVDCCAfmgAwIBAgIUPdJpjMqO4Bls4WZx2+BcORTjlJswCgYIKoZIzj0EAwIw
-RTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoMGElu
-dGVybmV0IFdpZGdpdHMgUHR5IEx0ZDAeFw0yNDEyMDMxMTM0NTJaFw0yNTEyMDMx
-MTM0NTJaMEUxCzAJBgNVBAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYD
-VQQKDBhJbnRlcm5ldCBXaWRnaXRzIFB0eSBMdGQwWTATBgcqhkjOPQIBBggqhkjO
-PQMBBwNCAAQUlhlvcCeMLmKr98zpjwL+vFPXFGTqulzZrNfxR0OG3RkjRJ2CM4xk
-emDfzwBi/44InVtwa0qOT7J/n4A9H3T2o4HGMIHDMA8GA1UdEwEB/wQFMAMBAf8w
-HQYDVR0OBBYEFHqUBkBqqW11hmwTeE3dmAoa5NDEMIGABgNVHSMEeTB3gBR6lAZA
-aqltdYZsE3hN3ZgKGuTQxKFJpEcwRTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNv
-bWUtU3RhdGUxITAfBgNVBAoMGEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZIIUPdJp
-jMqO4Bls4WZx2+BcORTjlJswDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMCA0kA
-MEYCIQDmYbg42vFmrqwp9b1Z2MQYBdE2PBuQL/thL4PHrajW4gIhAOIfUVucqEzT
-tGhGJX/ipfAuxvVB4dSElUM+tMOXPqtj
------END CERTIFICATE-----";
-
-        let cert = X509::from_pem(cert.as_bytes()).unwrap();
-
-        JwtX5Chain(vec![base64::encode_block(&cert.to_der().unwrap())])
+        X5Chain::dummy().try_into().unwrap()
     }
 }
 
-impl From<X5Chain> for JwtX5Chain {
-    fn from(x5chain: X5Chain) -> Self {
-        let der_certs = x5chain.into_bytes();
+impl TryFrom<X5Chain> for JwtX5Chain {
+    type Error = bherror::Error<Error>;
 
-        let base64_ders = der_certs
+    fn try_from(x5chain: X5Chain) -> Result<Self> {
+        let base64_ders = x5chain
+            .as_bytes()?
             .iter()
             .map(|der| base64::encode_block(der))
             .collect();
 
-        JwtX5Chain(base64_ders)
+        Ok(JwtX5Chain(base64_ders))
     }
 }
 
@@ -90,8 +71,9 @@ mod tests {
 
     #[test]
     fn test_from_x5chain_to_jwtx5chain() {
-        let x5chain = X5Chain::dummy();
+        let received: JwtX5Chain = X5Chain::dummy().try_into().unwrap();
+        let expected = JwtX5Chain::dummy();
 
-        assert_eq!(JwtX5Chain::from(x5chain), JwtX5Chain::dummy());
+        assert_eq!(received, expected);
     }
 }

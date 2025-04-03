@@ -32,7 +32,7 @@ use openssl::{
 };
 use rand::RngCore;
 
-use crate::{error::Error, x5chain::X5Chain};
+use crate::{Error, Result, X509Trust, X5Chain};
 
 type PrivateKey = PKey<Private>;
 
@@ -61,7 +61,7 @@ const MAXIMUM_SERIAL_NUMBER_HEX: &str = "7ffffffffffffffffffffffffffffffffffffff
 const VALIDITY_PERIOD_IN_DAYS: u32 = 365 * 10;
 
 impl CertificatePrivateKeyPair {
-    fn from_private_key_and_cert(private_key: &[u8], cert: &str) -> bherror::Result<Self, Error> {
+    fn from_private_key_and_cert(private_key: &[u8], cert: &str) -> Result<Self> {
         let private_key = PrivateKey::private_key_from_pem(private_key)
             .foreign_err(|| Error::Builder)
             .ctx(|| "couldn't load private key")?;
@@ -84,9 +84,7 @@ impl CertificatePrivateKeyPair {
     /// number of attempts. Failures to sample a vector beyond this number of attempts
     /// are reported as errors, and the type I error rate under the null hypothesis
     /// that all bits are uniform i.i.d. is at most `2^(-256)`.
-    pub(crate) fn generate_random_nonzero_bits_big_endian(
-        n_bits: NonZeroUsize,
-    ) -> bherror::Result<Vec<u8>, Error> {
+    pub(crate) fn generate_random_nonzero_bits_big_endian(n_bits: NonZeroUsize) -> Result<Vec<u8>> {
         let mut rng = rand::rng();
 
         let bytes: usize = n_bits.get().div_ceil(8);
@@ -137,7 +135,7 @@ impl CertificatePrivateKeyPair {
 
     /// See this [stackexchange answer](https://crypto.stackexchange.com/questions/257/unpredictability-of-x-509-serial-numbers)
     /// for more details.
-    fn generate_random_serial_number() -> bherror::Result<Asn1Integer, Error> {
+    fn generate_random_serial_number() -> Result<Asn1Integer> {
         let bits = NonZeroUsize::new(SERIAL_NUMBER_BITS as usize).unwrap();
         let serial_number = Self::generate_random_nonzero_bits_big_endian(bits)?;
 
@@ -164,7 +162,7 @@ impl CertificatePrivateKeyPair {
         subject_private_key: &PrivateKey,
         subject_name: &X509Name,
         subject_alternative_names: &[SubjectAlternativeName],
-    ) -> bherror::Result<X509, Error> {
+    ) -> Result<X509> {
         let mut cert_builder = X509::builder()
             .foreign_err(|| Error::Builder)
             .ctx(|| "Cannot create cert builder")?;
@@ -319,7 +317,7 @@ impl Builder {
         intermediary_private_key: &[u8],
         intermediary_certificate: &[u8],
         trusted_root_certificate: &[u8],
-    ) -> bherror::Result<Self, Error> {
+    ) -> Result<Self> {
         let trusted_root_certificate = X509::from_pem(trusted_root_certificate)
             .foreign_err(|| Error::Builder)
             .ctx(|| "invalid trusted root certificate")?;
@@ -343,7 +341,6 @@ impl Builder {
             intermediary_private_key,
             intermediary_certificate,
         )
-        .foreign_err(|| Error::Builder)
         .ctx(|| "invalid certificate and private key pair")?;
 
         Ok(Self {
@@ -361,7 +358,7 @@ impl Builder {
         &self,
         issuer_private_key: &[u8],
         iss: Option<&UriBuf>,
-    ) -> bherror::Result<X5Chain, Error> {
+    ) -> Result<X5Chain> {
         let issuer_private_key = PrivateKey::private_key_from_pem(issuer_private_key)
             .foreign_err(|| Error::Builder)
             .ctx(|| "couldn't load Issuer's private key")?;
@@ -386,16 +383,16 @@ impl Builder {
                 &subject_name.build(),
                 &subject_alternative_names,
             )
-            .foreign_err(|| Error::Builder)
             .ctx(|| "couldn't issue Issuer's certificate")?;
 
         let intermediary_certificate = self.intermediary_key_pair.cert.clone();
 
-        X5Chain::new(
-            vec![issuer_certificate, intermediary_certificate],
-            vec![self.trusted_root_certificate.clone()],
-        )
-        .foreign_err(|| Error::Builder)
+        let chain = X5Chain::new(vec![issuer_certificate, intermediary_certificate])?;
+
+        let trust = X509Trust::new(vec![self.trusted_root_certificate.clone()]);
+        chain.verify_against_trusted_roots(&trust)?;
+
+        Ok(chain)
     }
 
     /// Constructor of test `X5ChainBuilder` instance.
