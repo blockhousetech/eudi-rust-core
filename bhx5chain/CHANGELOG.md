@@ -8,6 +8,19 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-04-07
+
+### Removed
+
+- The chain is no longer verified against trusted root certificates upon
+  creation.
+
+### Added
+
+- The `X509Trust` structure to hold the trusted root certificates.
+- The method on the `X5Chain` that verifies the certificate chain against the
+  trusted root certificates within the `X509Trust`.
+
 ## [0.1.0] - 2025-03-26
 
 ### Added
@@ -20,3 +33,4 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 [Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhx5chain/v0.1.0...HEAD>
 [0.1.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.1.0>
+[0.2.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.2.0>

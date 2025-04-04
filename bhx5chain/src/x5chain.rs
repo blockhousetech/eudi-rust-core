@@ -25,59 +25,96 @@ use openssl::{
         X509StoreContext, X509,
     },
 };
-use serde::{Deserialize, Serialize};
 
-use crate::{error::Error, JwtX5Chain};
+use crate::{Error, JwtX5Chain, Result};
 
-/// The `x5chain` as defined in [RFC 9360][1] stored internally in DER format.
+/// The `x5chain` as defined in [RFC 9360][1].
 ///
-/// We use DER format for easier serialization ([`openssl::x509::X509`] doesn't implement
-/// [`serde`]) and we also currently only depend on that format when using it.
-///
-/// The certificates are to be ordered starting with the certificate containing the end-entity key
+/// The certificates are ordered starting with the certificate containing the end-entity key
 /// followed by the certificate that signed it, and so on, as stated in [RFC 9360][1].
 ///
 /// All methods of this type that return an [`Error`] do so in case the `x5chain` is invalid.
 ///
 /// [1]: <https://www.rfc-editor.org/rfc/rfc9360.html#section-2-5.4.1>
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct X5Chain(Vec<Vec<u8>>);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct X5Chain {
+    leaf: X509,
+    intermediates: Vec<X509>,
+}
 
 impl X5Chain {
     /// Create a new [`X5Chain`].
     ///
-    /// The chain *must* be ordered in such a way that leaf certificate is at first place, then
-    /// goes its parent, and so on. The root CA may be in chain, but it *must* be found in
-    /// `trusted_root_certificates`.
+    /// The chain **MUST BE** ordered in such a way that the leaf certificate is at first place,
+    /// then goes its parent, and so on.
     ///
-    /// Using only intermediary CA in `trusted_root_certificates` will result with an error.
-    pub fn new(
-        chain: Vec<X509>,
-        trusted_root_certificates: Vec<X509>,
-    ) -> bherror::Result<Self, Error> {
-        let leaf_cert = chain
-            .first()
-            .ok_or_else(|| bherror::Error::root(Error::X5Chain))
-            .ctx(|| "Chain cannot be empty")?
-            .clone();
-
+    /// # Warning
+    ///
+    /// The chain is at this point **NOT VALIDATED** against any trusted root certificate. In order
+    /// to validate the chain against a trusted root certificate, use the
+    /// [`X5Chain::verify_against_trusted_roots`] method.
+    pub fn new(chain: Vec<X509>) -> Result<Self> {
         // validate the order of certificates
         validate_chain_order(&chain)?;
+
+        let mut chain = chain.into_iter();
+        // `expect` is fine as the length is checked within the `validate_chain_order`
+        let leaf = chain.next().expect("chain is empty");
+        let intermediates = chain.collect();
+
+        Ok(Self {
+            leaf,
+            intermediates,
+        })
+    }
+
+    /// Constructs a [`X5Chain`] from raw bytes.
+    ///
+    /// Each certificate **MUST BE** represented as a [`Vec`] of bytes of the respective certificate
+    /// in the _DER_ format.
+    ///
+    /// The chain **MUST BE** ordered in such a way that the leaf certificate is at first place,
+    /// then goes its parent, and so on.
+    ///
+    /// # Warning
+    ///
+    /// The chain is at this point **NOT VALIDATED** against any trusted root certificate. In order
+    /// to validate the chain against a trusted root certificate, use the
+    /// [`X5Chain::verify_against_trusted_roots`] method.
+    pub fn from_raw_bytes(bytes: &[Vec<u8>]) -> Result<Self> {
+        let certs = bytes
+            .iter()
+            .enumerate()
+            .map(|(i, der)| X509::from_der(der).foreign_err(|| Error::X5Chain).ctx(|| i))
+            .collect::<Result<_>>()
+            .ctx(|| "invalid X509 certificate")?;
+
+        Self::new(certs)
+    }
+
+    /// Verify the [`X5Chain`] against trusted root certificates.
+    ///
+    /// The root certificate may be in chain, but it **MUST BE** found in `trust` as well.
+    pub fn verify_against_trusted_roots(&self, trust: &X509Trust) -> Result<()> {
+        // It is "ugly" that we need to clone here, but if intermediates are kept as a Stack instead
+        // of Vec, it messes up a lot of other things, such as Debug, Clone, PartialEq. It is hard
+        // to work with it in general.
+        let intermediates = chain_to_stack(self.intermediates.clone())?;
+
+        // It is "ugly" that we need to clone here, but if trust is kept as X509Store, instead of
+        // Vec, it messes up a lot of other things, such as Debug, Clone. It is hard to work with it
+        // as well.
+        let trust = certs_to_store(trust.0.clone())?;
 
         // The `X509StoreContext` doesn't bother if chain has leaf certificate in chain or not. It
         // uses chain as list of untrusted certificates that should help verify target certificate.
         // For more details check https://docs.openssl.org/master/man3/X509_STORE_CTX_new/
-        let chain = chain_to_stack(chain)?;
-        let trusted_root_certificates = certs_to_store(trusted_root_certificates)?;
 
         let mut context = X509StoreContext::new().foreign_err(|| Error::X5Chain)?;
         let is_valid = context
-            .init(
-                &trusted_root_certificates,
-                &leaf_cert,
-                &chain,
-                |context_ref| clean_up_after_openssl(|| context_ref.verify_cert()),
-            )
+            .init(&trust, &self.leaf, &intermediates, |ctx| {
+                clean_up_after_openssl(|| ctx.verify_cert())
+            })
             .foreign_err(|| Error::X5Chain)?;
 
         if !is_valid {
@@ -88,64 +125,35 @@ impl X5Chain {
                     context.error_depth(),
                     context.error()
                 )));
-        }
+        };
 
-        Ok(Self(
-            chain
-                .into_iter()
-                .map(|cert| cert.to_der())
-                .collect::<Result<_, _>>()
-                .foreign_err(|| Error::X5Chain)
-                .ctx(|| "Failed to serialize cert in DER")?,
-        ))
-    }
-
-    /// Constructs a [`X5Chain`] from raw bytes.
-    ///
-    /// The chain *must* be ordered in such a way that the leaf certificate is at
-    /// the first place, then goes its parent, and so on.
-    ///
-    /// # Warning
-    ///
-    /// The chain is not validated against any trusted root certificate.
-    pub fn from_raw_bytes(bytes: Vec<Vec<u8>>) -> bherror::Result<Self, Error> {
-        if bytes.is_empty() {
-            return Err(bherror::Error::root(Error::X5Chain).ctx("chain is empty"));
-        }
-
-        let certs = bytes
-            .iter()
-            .map(|der| X509::from_der(der))
-            .collect::<Result<Vec<_>, _>>()
-            .foreign_err(|| Error::X5Chain)
-            .ctx(|| "invalid X509 certificate(s)")?;
-
-        // validate the order of certificates
-        validate_chain_order(&certs)?;
-
-        Ok(Self(bytes))
+        Ok(())
     }
 
     /// Convert the chain into a list of DER encoded certificates.
-    pub fn into_bytes(self) -> Vec<Vec<u8>> {
-        self.0
+    pub fn as_bytes(&self) -> Result<Vec<Vec<u8>>> {
+        let mut bytes = Vec::new();
+
+        bytes.push(self.leaf.to_der().foreign_err(|| Error::X5Chain)?);
+
+        for intermediate in &self.intermediates {
+            bytes.push(intermediate.to_der().foreign_err(|| Error::X5Chain)?);
+        }
+
+        Ok(bytes)
     }
 
     /// Returns the public key from the leaf certificate.
-    pub fn leaf_certificate_key(&self) -> bherror::Result<PKey<Public>, Error> {
-        X509::from_der(self.0.first().expect("Chain cannot be empty"))
-            .foreign_err(|| Error::X5Chain)
-            .ctx(|| "Failed to create X509 from chain bytes")?
+    pub fn leaf_certificate_key(&self) -> Result<PKey<Public>> {
+        self.leaf_certificate()
             .public_key()
             .foreign_err(|| Error::X5Chain)
             .ctx(|| "Failed to access X509 public key")
     }
 
     /// Returns the leaf certificate.
-    pub fn leaf_certificate(&self) -> bherror::Result<X509, Error> {
-        X509::from_der(self.0.first().expect("Chain cannot be empty"))
-            .foreign_err(|| Error::X5Chain)
-            .ctx(|| "Failed to create X509 from chain bytes")
+    pub fn leaf_certificate(&self) -> &X509 {
+        &self.leaf
     }
 
     /// Constructor of test `X5Chain` instance.
@@ -171,39 +179,51 @@ tGhGJX/ipfAuxvVB4dSElUM+tMOXPqtj
 
         let cert = X509::from_pem(cert.as_bytes()).unwrap();
 
-        X5Chain::new(vec![cert.clone()], vec![cert]).unwrap()
+        let trust = X509Trust::new(vec![cert.clone()]);
+
+        let chain = X5Chain::new(vec![cert]).unwrap();
+        chain.verify_against_trusted_roots(&trust).unwrap();
+
+        chain
+    }
+}
+
+/// A collection of [`X509`] trusted root certificates.
+///
+/// This is used to verify the authenticity of the [`X5Chain`].
+#[derive(Debug, Clone)]
+pub struct X509Trust(Vec<X509>);
+
+impl X509Trust {
+    /// Create a new [`X509Trust`].
+    pub fn new(trust: Vec<X509>) -> Self {
+        Self(trust)
     }
 }
 
 /// Helper method for converting certificates to `Stack<x509>`.
-fn chain_to_stack(chain: Vec<X509>) -> bherror::Result<Stack<X509>, Error> {
-    chain
-        .into_iter()
-        .try_fold(
-            Stack::new().foreign_err(|| Error::X5Chain)?,
-            |mut chain, cert| {
-                chain.push(cert)?;
-                Ok::<_, openssl::error::ErrorStack>(chain)
-            },
-        )
-        .foreign_err(|| Error::X5Chain)
+fn chain_to_stack(chain: impl IntoIterator<Item = X509>) -> Result<Stack<X509>> {
+    let mut intermediates = Stack::new().foreign_err(|| Error::X5Chain)?;
+
+    for cert in chain {
+        intermediates.push(cert).foreign_err(|| Error::X5Chain)?;
+    }
+
+    Ok(intermediates)
 }
 
 /// Helper method for converting certificates to `X509Store`.
-fn certs_to_store(certificates: Vec<X509>) -> bherror::Result<X509Store, Error> {
+fn certs_to_store(certificates: impl IntoIterator<Item = X509>) -> Result<X509Store> {
     let mut builder = X509StoreBuilder::new().foreign_err(|| Error::X5Chain)?;
     builder
         .set_flags(X509VerifyFlags::X509_STRICT | X509VerifyFlags::CHECK_SS_SIGNATURE)
-        .unwrap();
+        .foreign_err(|| Error::X5Chain)?;
 
-    Ok(certificates
-        .into_iter()
-        .try_fold(builder, |mut x509_store_builder, cert| {
-            x509_store_builder.add_cert(cert)?;
-            Ok::<_, openssl::error::ErrorStack>(x509_store_builder)
-        })
-        .foreign_err(|| Error::X5Chain)?
-        .build())
+    for cert in certificates {
+        builder.add_cert(cert).foreign_err(|| Error::X5Chain)?;
+    }
+
+    Ok(builder.build())
 }
 
 /// Validates that the certificates in a chain are in order.
@@ -215,7 +235,11 @@ fn certs_to_store(certificates: Vec<X509>) -> bherror::Result<X509Store, Error> 
 ///
 /// This check is not provided through [`X509StoreContext`]. Without this check,
 /// chains in reversed order would seem valid, even though they are not.
-fn validate_chain_order(chain: &[X509]) -> bherror::Result<(), Error> {
+fn validate_chain_order(chain: &[X509]) -> Result<()> {
+    if chain.is_empty() {
+        return Err(bherror::Error::root(Error::X5Chain).ctx("chain is empty"));
+    }
+
     let is_ordered = chain
         .windows(2)
         .try_fold(true, |acc, cert_pair| {
@@ -239,16 +263,20 @@ fn validate_chain_order(chain: &[X509]) -> bherror::Result<(), Error> {
 impl TryFrom<JwtX5Chain> for X5Chain {
     type Error = bherror::Error<Error>;
 
-    fn try_from(jwt_x5chain: JwtX5Chain) -> Result<Self, Self::Error> {
-        let base64_ders = jwt_x5chain.into_base64_ders();
-
-        let der_certs = base64_ders
+    fn try_from(jwt_x5chain: JwtX5Chain) -> Result<Self> {
+        let der_certs: Vec<Vec<u8>> = jwt_x5chain
+            .into_base64_ders()
             .iter()
-            .map(|base64_der| base64::decode_block(base64_der).foreign_err(|| Error::X5Chain))
-            .collect::<bherror::Result<_, _>>()?;
+            .enumerate()
+            .map(|(i, base64_der)| {
+                base64::decode_block(base64_der)
+                    .foreign_err(|| Error::X5Chain)
+                    .ctx(|| i)
+            })
+            .collect::<Result<_>>()
+            .ctx(|| "invalid base64 string")?;
 
-        // TODO(issues/10): Check trusted root certificate
-        X5Chain::from_raw_bytes(der_certs)
+        X5Chain::from_raw_bytes(&der_certs)
     }
 }
 
@@ -256,7 +284,9 @@ impl TryFrom<JwtX5Chain> for X5Chain {
 ///
 /// Usage: wrap an `openssl` call in a closure and call this function with it.
 /// Try to make the closure as small as possible.
-fn clean_up_after_openssl<T>(f: impl FnOnce() -> Result<T, ErrorStack>) -> Result<T, ErrorStack> {
+fn clean_up_after_openssl<T>(
+    f: impl FnOnce() -> std::result::Result<T, ErrorStack>,
+) -> std::result::Result<T, ErrorStack> {
     // Early return on error. Hopefully the error stack will be popped here if everything is correct.
     let return_value = f()?;
 
@@ -385,8 +415,10 @@ jdc01UGluQ7Pq6abMWPn5OZaPDyCSqpjbw==
         assert!(matches!(err.error, Error::X5Chain));
         assert_empty_error_stack();
 
-        // empty is valid
-        validate_chain_order(&[]).unwrap();
+        // empty is invalid
+        let err = validate_chain_order(&[]).unwrap_err();
+        assert!(matches!(err.error, Error::X5Chain));
+        assert_empty_error_stack();
 
         // single certificate is valid
         validate_chain_order(&[root]).unwrap();
@@ -400,15 +432,15 @@ jdc01UGluQ7Pq6abMWPn5OZaPDyCSqpjbw==
         let root = root.to_der().unwrap();
 
         // valid chain
-        X5Chain::from_raw_bytes(vec![leaf, intermediary, root]).unwrap();
+        X5Chain::from_raw_bytes(&[leaf, intermediary, root]).unwrap();
 
         // empty chain is invalid
-        let err = X5Chain::from_raw_bytes(vec![]).unwrap_err();
+        let err = X5Chain::from_raw_bytes(&[]).unwrap_err();
         assert!(matches!(err.error, Error::X5Chain));
         assert_empty_error_stack();
 
         // invalid bytes
-        let err = X5Chain::from_raw_bytes(vec![vec![0u8, 1u8], vec![2u8]]).unwrap_err();
+        let err = X5Chain::from_raw_bytes(&[vec![0u8, 1u8], vec![2u8]]).unwrap_err();
         assert!(matches!(err.error, Error::X5Chain));
         assert_empty_error_stack();
     }
@@ -417,33 +449,45 @@ jdc01UGluQ7Pq6abMWPn5OZaPDyCSqpjbw==
     fn check_x5chain_relationship() {
         let [leaf, intermediary, root] = get_certs();
 
-        let trusted = vec![root.clone()];
-
         // Chain is valid when chain is in right order
-        assert!(X5Chain::new(vec![leaf.clone(), intermediary.clone()], trusted.clone()).is_ok());
-
-        // Chain is not valid when there are no trusted root CAs (this would pass if
-        // `X509VerifyFlags::PARTIAL_CHAIN` was used)
-        assert!(X5Chain::new(vec![leaf.clone()], vec![intermediary.clone()]).is_err());
-        assert_empty_error_stack();
-
-        // Chain is valid when both intermediary and root CA are trusted
-        assert!(X5Chain::new(vec![leaf.clone()], vec![intermediary.clone(), root.clone()]).is_ok());
+        X5Chain::new(vec![leaf.clone()]).unwrap();
+        X5Chain::new(vec![leaf.clone(), intermediary.clone()]).unwrap();
+        X5Chain::new(vec![leaf.clone(), intermediary.clone(), root]).unwrap();
 
         // Chain is not valid if chain is not in right order
-        assert!(X5Chain::new(vec![intermediary.clone(), leaf.clone()], trusted.clone()).is_err());
-        assert_empty_error_stack();
-
-        // Chain is not valid if leaf cannot be traced to root
-        assert!(X5Chain::new(vec![leaf.clone()], trusted.clone()).is_err());
+        X5Chain::new(vec![intermediary, leaf]).unwrap_err();
         assert_empty_error_stack();
 
         // Chain cannot be empty
-        assert!(X5Chain::new(vec![], trusted).is_err());
+        X5Chain::new(Vec::new()).unwrap_err();
+        assert_empty_error_stack();
+    }
+
+    #[test]
+    fn test_verify_against_trusted_roots() {
+        let [leaf, intermediary, root] = get_certs();
+
+        let chain = X5Chain::new(vec![leaf.clone()]).unwrap();
+
+        // Chain is valid when both intermediary and root CA are trusted
+        let trusted = X509Trust::new(vec![intermediary.clone(), root.clone()]);
+        chain.verify_against_trusted_roots(&trusted).unwrap();
+
+        // Chain is not valid when there are no trusted root CAs (this would
+        // pass if `X509VerifyFlags::PARTIAL_CHAIN` was used)
+        let trusted = X509Trust::new(vec![intermediary.clone()]);
+        chain.verify_against_trusted_roots(&trusted).unwrap_err();
+        assert_empty_error_stack();
+
+        // Chain is not valid if leaf cannot be traced to root
+        let trusted = X509Trust::new(vec![root.clone()]);
+        chain.verify_against_trusted_roots(&trusted).unwrap_err();
         assert_empty_error_stack();
 
         // Chain is not valid when leaf cannot be traced to any trusted root
-        assert!(X5Chain::new(vec![leaf, intermediary, root], vec![]).is_err());
+        let chain = X5Chain::new(vec![leaf, intermediary, root]).unwrap();
+        let trusted = X509Trust::new(Vec::new());
+        chain.verify_against_trusted_roots(&trusted).unwrap_err();
         assert_empty_error_stack();
     }
 
@@ -459,8 +503,9 @@ jdc01UGluQ7Pq6abMWPn5OZaPDyCSqpjbw==
 
     #[test]
     fn test_from_jwtx5chain_to_x5chain() {
-        let jwt_x5chain = JwtX5Chain::dummy();
+        let received: X5Chain = JwtX5Chain::dummy().try_into().unwrap();
+        let expected = X5Chain::dummy();
 
-        assert_eq!(X5Chain::try_from(jwt_x5chain).unwrap(), X5Chain::dummy());
+        assert_eq!(received, expected);
     }
 }

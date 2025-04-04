@@ -25,3 +25,7 @@ pub enum Error {
 }
 
 impl bherror::BhError for Error {}
+
+/// The [`bherror::Result`] type with the error type of
+/// [`x5chain::Error`](Error), used throughout this crate.
+pub type Result<T> = bherror::Result<T, Error>;
