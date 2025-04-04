@@ -1,5 +1,3 @@
 /target
 # Ignore Cargo.lock, if this causes trouble, track Cargo.lock in the repo
 Cargo.lock
-
-**/.vscode/settings.json
