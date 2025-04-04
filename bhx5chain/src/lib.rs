@@ -34,14 +34,17 @@
 //! ## Simple Use
 //!
 //! You can construct the [`X5Chain`] directly if you have [`openssl::x509::X509`] certificates.
-//! The following example assumes that is the case for `*_certificate` veriables.
+//! The following example assumes that is the case for `*_certificate` variables.
 //!
 //! ```ignore
-//! let x5chain = bhx5chain::X5Chain::new(
-//!     vec![issuer_certificate, intermediary_certificate],
-//!     vec![trusted_root_certificate],
-//! )
-//! .expect("valid x5chain");
+//! let x5chain = bhx5chain::X5Chain::new(vec![issuer_certificate, intermediary_certificate])
+//!     .expect("valid x5chain");
+//!
+//! let trust = bhx5chain::X509Trust::new(vec![trusted_root_certificate]);
+//!
+//! x5chain
+//!     .verify_against_trusted_roots(&trust)
+//!     .expect("trusted x5chain");
 //!```
 //!
 //! ## Advanced Use
@@ -81,7 +84,7 @@
 //!
 //! ```ignore
 //! // Convert the `x5chain` into `JwtX5Chain` in order to serialize it in a JWT.
-//! let jwt_x5chain: bhx5chain::JwtX5Chain = x5chain.into();
+//! let jwt_x5chain: bhx5chain::JwtX5Chain = x5chain.try_into().expect("valid x5chain");
 //!
 //! // Alternatively, after deserializing the `JwtX5Chain` out of JWT, convert to `X5Chain` type.
 //! let x5chain: bhx5chain::X5Chain = jwt_x5chain.try_into().expect("valid x5chain");
