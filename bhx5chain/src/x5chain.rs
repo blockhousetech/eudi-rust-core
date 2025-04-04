@@ -38,8 +38,7 @@ use crate::{Error, JwtX5Chain, Result};
 /// [1]: <https://www.rfc-editor.org/rfc/rfc9360.html#section-2-5.4.1>
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct X5Chain {
-    /// A leaf [`X509`] certificate of the respective [`X5Chain`].
-    pub leaf: X509,
+    leaf: X509,
     intermediates: Vec<X509>,
 }
 
@@ -146,10 +145,15 @@ impl X5Chain {
 
     /// Returns the public key from the leaf certificate.
     pub fn leaf_certificate_key(&self) -> Result<PKey<Public>> {
-        self.leaf
+        self.leaf_certificate()
             .public_key()
             .foreign_err(|| Error::X5Chain)
             .ctx(|| "Failed to access X509 public key")
+    }
+
+    /// Returns the leaf certificate.
+    pub fn leaf_certificate(&self) -> &X509 {
+        &self.leaf
     }
 
     /// Constructor of test `X5Chain` instance.
