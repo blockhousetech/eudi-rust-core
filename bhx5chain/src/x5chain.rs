@@ -411,8 +411,10 @@ jdc01UGluQ7Pq6abMWPn5OZaPDyCSqpjbw==
         assert!(matches!(err.error, Error::X5Chain));
         assert_empty_error_stack();
 
-        // empty is valid
-        validate_chain_order(&[]).unwrap();
+        // empty is invalid
+        let err = validate_chain_order(&[]).unwrap_err();
+        assert!(matches!(err.error, Error::X5Chain));
+        assert_empty_error_stack();
 
         // single certificate is valid
         validate_chain_order(&[root]).unwrap();
