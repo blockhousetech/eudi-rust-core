@@ -13,7 +13,7 @@ repository = "https://github.com/blockhousetech/eudi-rust-core"
 [dependencies]
 base64 = "0.21.7"
 bherror = "0.1"
-bhx5chain = "0.1"
+bhx5chain = "0.2"
 iref = "3.2"
 # `jwt` crate supports cryptography backend injection for signing/verification
 # via traits, unlike the much more popular `jsonwebtoken`
