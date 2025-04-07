@@ -328,10 +328,15 @@ fn public_key_from_jwk_es256(public_key: &JwkPublic) -> Result<EcPublic, FormatE
     Ok(public_key)
 }
 
-fn check_len(coord: &[u8]) -> Result<&[u8; 32], FormatError> {
-    <&[u8; 32]>::try_from(coord)
+fn check_len(coord: &[u8]) -> Result<&[u8], FormatError> {
+    if coord.len() > 32 {
+        return Err(Error::root(FormatError::JwkParsingFailed(format!(
+            "check len of {:?} failed",
+            coord
+        ))));
+    }
+    <&[u8]>::try_from(coord)
         .foreign_err(|| FormatError::JwkParsingFailed("parsing coord failed".to_string()))
-        .ctx(|| format!("check len of {:?} failed", coord))
 }
 
 fn check_jwk_field(
@@ -450,6 +455,70 @@ mod tests {
         assert_eq!(
             error.downcast::<Error<FormatError>>().unwrap().error,
             FormatError::JwkParsingFailed("incorrect value on \"kty\" field".to_string())
+        );
+    }
+
+    #[test]
+    fn verify_jwt_long_public_key_coordinate() {
+        let public_jwk = json_object!({
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "b28d4MwZMjw8-00CG4xfnn9SLMVMM19SlqZpVb_uNtQ_too_long",
+            "y": "Xv5zWwuoaTgdS6hV43yI6gBwTnjukmFQQnJ_kCxzqk8"
+        });
+
+        let jwt = "\
+            eyJhbGciOiAiRVMyNTYiLCAidHlwIjogInZjK3NkLWp3dCJ9.eyJfc2QiOiBbIjBIWm1\
+            uU0lQejMzN2tTV2U3QzM0bC0tODhnekppLWVCSjJWel9ISndBVGciLCAiOVpicGxDN1R\
+            kRVc3cWFsNkJCWmxNdHFKZG1lRU9pWGV2ZEpsb1hWSmRSUSIsICJJMDBmY0ZVb0RYQ3V\
+            jcDV5eTJ1anFQc3NEVkdhV05pVWxpTnpfYXdEMGdjIiwgIklFQllTSkdOaFhJbHJRbzU\
+            4eWtYbTJaeDN5bGw5WmxUdFRvUG8xN1FRaVkiLCAiTGFpNklVNmQ3R1FhZ1hSN0F2R1R\
+            yblhnU2xkM3o4RUlnX2Z2M2ZPWjFXZyIsICJodkRYaHdtR2NKUXNCQ0EyT3RqdUxBY3d\
+            BTXBEc2FVMG5rb3ZjS09xV05FIiwgImlrdXVyOFE0azhxM1ZjeUE3ZEMtbU5qWkJrUmV\
+            EVFUtQ0c0bmlURTdPVFUiLCAicXZ6TkxqMnZoOW80U0VYT2ZNaVlEdXZUeWtkc1dDTmc\
+            wd1RkbHIwQUVJTSIsICJ3elcxNWJoQ2t2a3N4VnZ1SjhSRjN4aThpNjRsbjFqb183NkJ\
+            DMm9hMXVnIiwgInpPZUJYaHh2SVM0WnptUWNMbHhLdUVBT0dHQnlqT3FhMXoySW9WeF9\
+            ZRFEiXSwgImlzcyI6ICJodHRwczovL2lzc3Vlci5leGFtcGxlLmNvbSIsICJpYXQiOiA\
+            xNjgzMDAwMDAwLCAiZXhwIjogMTg4MzAwMDAwMCwgInZjdCI6ICJodHRwczovL2JtaS5\
+            idW5kLmV4YW1wbGUvY3JlZGVudGlhbC9waWQvMS4wIiwgImFnZV9lcXVhbF9vcl9vdmV\
+            yIjogeyJfc2QiOiBbIkZjOElfMDdMT2NnUHdyREpLUXlJR085N3dWc09wbE1Makh2UkM\
+            0UjQtV2ciLCAiWEx0TGphZFVXYzl6Tl85aE1KUm9xeTQ2VXNDS2IxSXNoWnV1cVVGS1N\
+            DQSIsICJhb0NDenNDN3A0cWhaSUFoX2lkUkNTQ2E2NDF1eWNuYzh6UGZOV3o4bngwIiw\
+            gImYxLVAwQTJkS1dhdnYxdUZuTVgyQTctRVh4dmhveHY1YUhodUVJTi1XNjQiLCAiazV\
+            oeTJyMDE4dnJzSmpvLVZqZDZnNnl0N0Fhb25Lb25uaXVKOXplbDNqbyIsICJxcDdaX0t\
+            5MVlpcDBzWWdETzN6VnVnMk1GdVBOakh4a3NCRG5KWjRhSS1jIl19LCAiX3NkX2FsZyI\
+            6ICJzaGEtMjU2IiwgImNuZiI6IHsiandrIjogeyJrdHkiOiAiRUMiLCAiY3J2IjogIlA\
+            tMjU2IiwgIngiOiAiVENBRVIxOVp2dTNPSEY0ajRXNHZmU1ZvSElQMUlMaWxEbHM3dkN\
+            lR2VtYyIsICJ5IjogIlp4amlXV2JaTVFHSFZXS1ZRNGhiU0lpcnNWZnVlY0NFNnQ0alQ\
+            5RjJIWlEifX19.jeF9GjGbjCr0NND0SbkV4HeSpsysixALFScJl4bYkIykXhF6cRtqni\
+            64_d7X6Ef8Rx80rfsgXe0H7TdiSoIJOw";
+
+        #[derive(Debug, Deserialize)]
+        struct MinimalHeader {
+            alg: jwt::AlgorithmType,
+        }
+        impl jwt::JoseHeader for MinimalHeader {
+            fn algorithm_type(&self) -> jwt::AlgorithmType {
+                self.alg
+            }
+        }
+
+        let error = utils::verify_jwt_signature::<
+            &str,
+            jwt::Token<MinimalHeader, Value, _>,
+            Es256Verifier,
+        >(jwt, &Es256Verifier, &public_jwk)
+        .err()
+        .unwrap();
+
+        assert_eq!(
+            error.downcast::<Error<FormatError>>().unwrap().error,
+            FormatError::JwkParsingFailed(
+                "check len of [111, 111, 29, 224, 204, 25, 50, \
+                60, 60, 251, 77, 2, 27, 140, 95, 158, 127, 82, 44, 197, 76, 51, 95, 82, \
+                150, 166, 105, 85, 191, 238, 54, 212, 63, 182, 138, 63, 150, 137, 224] failed"
+                    .to_string()
+            )
         );
     }
 
