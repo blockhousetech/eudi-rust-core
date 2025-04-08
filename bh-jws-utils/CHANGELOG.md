@@ -14,10 +14,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ### Fixed
 
-- The `verify_jwt_signature` function now performs a more relaxed
-  check on the length of the public key coordinates.
-  Previously, it required the coordinates to be exactly 32 bytes.
-  This has been updated to allow lengths of **32 bytes or less**.
+- The `verify_jwt_signature` function now performs a more relaxed check on the
+  length of the public key coordinates. Previously, it required the coordinates
+  to be exactly 32 bytes. This has been updated to allow lengths of **32 bytes
+  or less**.
 
 
 ## [0.1.0] - 2025-04-01

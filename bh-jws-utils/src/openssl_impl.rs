@@ -329,14 +329,20 @@ fn public_key_from_jwk_es256(public_key: &JwkPublic) -> Result<EcPublic, FormatE
 }
 
 fn check_len(coord: &[u8]) -> Result<&[u8], FormatError> {
+    // According to RFC 7518:
+    // - Section 6.2.1.2: <https://datatracker.ietf.org/doc/html/rfc7518#section-6.2.1.2>
+    // - Section 6.2.1.3: <https://datatracker.ietf.org/doc/html/rfc7518#section-6.2.1.3>
+    //
+    // The key must be exactly 32 bytes long. However, for the sake of interoperability
+    // with other implementations, this strict check is intentionally relaxed.
     if coord.len() > 32 {
         return Err(Error::root(FormatError::JwkParsingFailed(format!(
-            "check len of {:?} failed",
+            "length check failed: the length exceeds 32 bytes ({}), {:?}",
+            coord.len(),
             coord
         ))));
     }
-    <&[u8]>::try_from(coord)
-        .foreign_err(|| FormatError::JwkParsingFailed("parsing coord failed".to_string()))
+    Ok(coord)
 }
 
 fn check_jwk_field(
@@ -514,9 +520,10 @@ mod tests {
         assert_eq!(
             error.downcast::<Error<FormatError>>().unwrap().error,
             FormatError::JwkParsingFailed(
-                "check len of [111, 111, 29, 224, 204, 25, 50, \
-                60, 60, 251, 77, 2, 27, 140, 95, 158, 127, 82, 44, 197, 76, 51, 95, 82, \
-                150, 166, 105, 85, 191, 238, 54, 212, 63, 182, 138, 63, 150, 137, 224] failed"
+                "length check failed: the length exceeds 32 bytes (39), \
+                [111, 111, 29, 224, 204, 25, 50, 60, 60, 251, 77, 2, 27, \
+                140, 95, 158, 127, 82, 44, 197, 76, 51, 95, 82, 150, 166, \
+                105, 85, 191, 238, 54, 212, 63, 182, 138, 63, 150, 137, 224]"
                     .to_string()
             )
         );
