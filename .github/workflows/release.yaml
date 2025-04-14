@@ -9,6 +9,7 @@ on:
         options:
           - bh-jws-utils
           - bherror
+          - bhmdoc
           - bhx5chain
       version:
         description: SemVer identifier of a version

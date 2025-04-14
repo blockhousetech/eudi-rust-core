@@ -26,6 +26,7 @@ on:
           - all
           - bh-jws-utils
           - bherror
+          - bhmdoc
           - bhx5chain
 
 permissions:
