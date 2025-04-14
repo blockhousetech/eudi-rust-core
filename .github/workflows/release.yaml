@@ -83,6 +83,8 @@ jobs:
 
       - name: Tag the Release
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -afm "Release ${RELEASE_TAG}" "${RELEASE_TAG}" "${GIT_CHECKOUT_REF}"
           git push ${DRY_RUN_FLAG} origin "${RELEASE_TAG}"
 
