@@ -8,6 +8,11 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- The `public_jwk` method on the `Signer` `trait` that exposes the public key of
+  the respective implementer in the JWK format.
+
 ## [0.2.0] - 2025-04-09
 
 ### Changed
