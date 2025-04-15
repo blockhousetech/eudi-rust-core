@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::{error::Error as StdError, result::Result as StdResult};
+use std::result::Result as StdResult;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use bherror::{
@@ -35,7 +35,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use super::{utils, HasJwkKid, SignatureVerifier, Signer, SigningAlgorithm};
 use crate::{
     error::{CryptoError, FormatError},
-    json_object, HasX5Chain, JwkPublic,
+    json_object, BoxError, HasX5Chain, JwkPublic,
 };
 
 type EcPrivate = EcKey<Private>;
@@ -232,7 +232,7 @@ impl Signer for Es256Signer {
         SigningAlgorithm::Es256
     }
 
-    fn sign(&self, message: &[u8]) -> StdResult<Vec<u8>, Box<dyn StdError + Send + Sync>> {
+    fn sign(&self, message: &[u8]) -> StdResult<Vec<u8>, BoxError> {
         let digest = sha256(message);
         let signature = EcdsaSig::sign(&digest, self.private_key.as_ref())?;
 
@@ -242,6 +242,10 @@ impl Signer for Es256Signer {
         let mut jws = (r as Box<[_]>).into_vec();
         jws.extend_from_slice(&*s);
         Ok(jws)
+    }
+
+    fn public_jwk(&self) -> StdResult<JwkPublic, BoxError> {
+        Ok(self.public_jwk()?)
     }
 }
 
@@ -256,8 +260,12 @@ impl Signer for Es256SignerWithChain {
         self.signer.algorithm()
     }
 
-    fn sign(&self, message: &[u8]) -> StdResult<Vec<u8>, Box<dyn StdError + Send + Sync>> {
+    fn sign(&self, message: &[u8]) -> StdResult<Vec<u8>, BoxError> {
         self.signer.sign(message)
+    }
+
+    fn public_jwk(&self) -> StdResult<JwkPublic, BoxError> {
+        Ok(self.public_jwk()?)
     }
 }
 
@@ -288,7 +296,7 @@ impl SignatureVerifier for Es256Verifier {
         message: &[u8],
         signature: &[u8],
         public_key: &JwkPublic,
-    ) -> StdResult<bool, Box<dyn StdError + Send + Sync>> {
+    ) -> StdResult<bool, BoxError> {
         let public_key = public_key_from_jwk_es256(public_key)?;
         let jws_bytes = <&[u8; 64]>::try_from(signature)?;
         let (r, s) = jws_bytes.split_at(32);

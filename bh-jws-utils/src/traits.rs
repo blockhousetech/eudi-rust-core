@@ -151,6 +151,9 @@ pub trait Signer {
     ///
     /// The `message` is guaranteed to be a valid JWS signing input.
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, BoxError>;
+
+    /// The public key of the respective [`Signer`] in the JWK format.
+    fn public_jwk(&self) -> Result<JwkPublic, BoxError>;
 }
 
 /// Subtrait for [`Signer`]-s which have an associated JWK `kid` (Key ID) parameter.
