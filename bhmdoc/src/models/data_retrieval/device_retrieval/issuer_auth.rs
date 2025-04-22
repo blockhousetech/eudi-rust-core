@@ -30,7 +30,7 @@ use bh_jws_utils::{public_jwk_from_x5chain_leaf, JwkPublic, SignatureVerifier, S
 use bherror::traits::{
     ErrorContext as _, ForeignBoxed as _, ForeignError as _, PropagateError as _,
 };
-use bhx5chain::X5Chain;
+use bhx5chain::{X509Trust, X5Chain};
 use coset::{
     iana::{EnumI64 as _, HeaderParameter},
     Algorithm, CoseKey, Header, Label, RegisteredLabelWithPrivate,
@@ -157,10 +157,14 @@ impl IssuerAuth {
 
     /// Verifies the issuer's signature of the [`IssuerAuth`].
     ///
+    /// If [`X509Trust`] is provided, the Issuer's authenticity is verified as
+    /// well.
+    ///
     /// The required information is extracted from the unprotected and protected
     /// header of the underlying `COSE_Sign1` structure.
     pub(crate) fn verify_signature<'a>(
         &self,
+        trust: Option<&X509Trust>,
         get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
     ) -> Result<()> {
         let alg = self
@@ -168,7 +172,7 @@ impl IssuerAuth {
             .ok_or_else(|| bherror::Error::root(MdocError::MissingSigningAlgorithm))
             .ctx(|| "issuer authentication")?;
 
-        let jwk = self.public_jwk(&alg)?;
+        let jwk = self.public_jwk(&alg, trust)?;
 
         let signature_verifier = get_signature_verifier(alg)
             .ok_or_else(|| bherror::Error::root(MdocError::MissingSignatureVerifier(alg)))?;
@@ -222,9 +226,12 @@ impl IssuerAuth {
 
     /// Extract the Issuer's public key in the JWK format.
     ///
+    /// If [`X509Trust`] is provided, the Issuer's authenticity is verified as
+    /// well.
+    ///
     /// Currently, only `ECDSA` keys are supported.
-    fn public_jwk(&self, alg: &SigningAlgorithm) -> Result<JwkPublic> {
-        let x5chain = self.x5chain()?;
+    fn public_jwk(&self, alg: &SigningAlgorithm, trust: Option<&X509Trust>) -> Result<JwkPublic> {
+        let x5chain = self.x5chain(trust)?;
 
         public_jwk_from_x5chain_leaf(&x5chain, alg, Some(DEFAULT_ISSUER_KID))
             .with_err(|| MdocError::InvalidPublicKey)
@@ -263,7 +270,10 @@ impl IssuerAuth {
 
     /// Return the `x5chain` from the unprotected header of the underlying
     /// `COSE_Sign1` structure.
-    pub fn x5chain(&self) -> Result<X5Chain> {
+    ///
+    /// If [`X509Trust`] is provided, the Issuer's authenticity is verified as
+    /// well.
+    pub fn x5chain(&self, trust: Option<&X509Trust>) -> Result<X5Chain> {
         let x5chain = self
             .0
             .unprotected
@@ -272,7 +282,18 @@ impl IssuerAuth {
             .find_map(|(l, v)| (l == &Label::Int(HeaderParameter::X5Chain.to_i64())).then_some(v))
             .ok_or_else(|| bherror::Error::root(MdocError::X5Chain).ctx("missing `x5chain`"))?;
 
-        cbor_value_to_x5chain(x5chain.clone())
+        let x5chain = cbor_value_to_x5chain(x5chain.clone())?;
+
+        // If trusted root certificates (`trust`) are present, verify the X.509
+        // chain against them.
+        if let Some(trust) = trust {
+            x5chain
+                .verify_against_trusted_roots(trust)
+                .with_err(|| MdocError::X5Chain)
+                .ctx(|| "x5chain not valid against trusted root certificates")?;
+        }
+
+        Ok(x5chain)
     }
 }
 
@@ -685,17 +706,14 @@ impl ValidityInfo {
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use bh_jws_utils::Es256Verifier;
+    use bh_jws_utils::{Es256Verifier, HasX5Chain as _};
 
+    use super::*;
     use crate::{
         models::{
-            data_retrieval::device_retrieval::{
-                issuer_auth::IssuerAuth,
-                response::{IssuerNameSpaces, IssuerSignedItem},
-            },
-            mdl::MDL_NAMESPACE,
+            data_retrieval::device_retrieval::response::IssuerSignedItem, mdl::MDL_NAMESPACE,
         },
-        MdocError,
+        utils::test::SimpleSigner,
     };
 
     fn dummy_issuer_auth(current_time: u64) -> IssuerAuth {
@@ -729,7 +747,7 @@ mod tests {
             .into(),
         );
 
-        let issuer_signer = crate::utils::test::SimpleSigner::issuer();
+        let issuer_signer = SimpleSigner::issuer();
         let (_, device_key) = crate::utils::test::dummy_device_key();
 
         IssuerAuth::new(
@@ -846,7 +864,7 @@ eb0733d667005f7467cec4b87b9381a6ba1ede8e00df29f32a37230f39a842a54821fdd223092819
             ciborium::from_reader::<IssuerAuth, _>(issuer_auth_bytes.as_slice()).unwrap();
 
         assert_matches!(
-            issuer_auth.verify_signature(|_| Some(&Es256Verifier)),
+            issuer_auth.verify_signature(None, |_| Some(&Es256Verifier)),
             Ok(_)
         );
     }
@@ -931,5 +949,29 @@ eb0733d667005f7467cec4b87b9381a6ba1ede8e00df29f32a37230f39a842a54821fdd223092819
                 .error,
             MdocError::DocumentExpired(_)
         );
+    }
+
+    #[test]
+    fn issuer_auth_x5chain_trust() {
+        let issuer_auth = dummy_issuer_auth(100);
+
+        let expected_x5chain = SimpleSigner::issuer().x5chain();
+
+        // for simplicity, the root is just the leaf certificate
+        let root = expected_x5chain.leaf_certificate().to_owned();
+
+        // Issuer authenticity verified
+        let trust = X509Trust::new(vec![root]);
+        let x5chain = issuer_auth.x5chain(Some(&trust)).unwrap();
+        assert_eq!(expected_x5chain, x5chain);
+
+        // no Issuer is trusted (empty `trust`)
+        let trust = X509Trust::new(vec![]);
+        let err = issuer_auth.x5chain(Some(&trust)).unwrap_err();
+        assert_eq!(err.error, MdocError::X5Chain);
+
+        // every Issuer is trusted (`trust` not provided)
+        let x5chain = issuer_auth.x5chain(None).unwrap();
+        assert_eq!(expected_x5chain, x5chain);
     }
 }

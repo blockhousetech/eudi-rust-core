@@ -16,6 +16,7 @@
 //! This module provides the [`Verifier`] type which is used to verify issued `mDoc` Credentials.
 
 use bh_jws_utils::{SignatureVerifier, SigningAlgorithm};
+use bhx5chain::X509Trust;
 use rand::Rng;
 
 use crate::{
@@ -65,6 +66,11 @@ impl Verifier {
 
     /// Verifies, extracts and returns the claims from the `mDoc` credential.
     ///
+    /// One can optionally provide a [`X509Trust`], in which case, the
+    /// authenticity of the Issuer will be verified against that `trust`. If
+    /// `trust` is set to [`None`], the authenticity of the Issuer **WILL NOT**
+    /// be verified.
+    ///
     /// # Error
     ///
     /// An error is returned if the provided [`DeviceResponse`] does not contain
@@ -75,6 +81,7 @@ impl Verifier {
         device_response: DeviceResponse,
         current_time: u64,
         mdoc_generated_nonce: &str,
+        trust: Option<&X509Trust>,
         get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
     ) -> Result<Vec<Claims>> {
         device_response
@@ -82,12 +89,10 @@ impl Verifier {
             .ok_or_else(|| bherror::Error::root(MdocError::EmptyDeviceResponse))?
             .into_iter()
             .map(|document| {
-                document_verify_into_claims(
+                self.document_verify_into_claims(
                     document,
-                    &self.client_id,
-                    &self.response_uri,
-                    &self.nonce,
                     mdoc_generated_nonce,
+                    trust,
                     &get_signature_verifier,
                     current_time,
                 )
@@ -99,28 +104,127 @@ impl Verifier {
     pub fn nonce(&self) -> &str {
         &self.nonce
     }
+
+    /// Returns the data elements from the provided [`Document`], while
+    /// performing the necessary verifications.
+    fn document_verify_into_claims<'a>(
+        &self,
+        document: Document,
+        mdoc_generated_nonce: &str,
+        trust: Option<&X509Trust>,
+        get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
+        current_time: u64,
+    ) -> Result<Claims> {
+        document.verify(
+            &self.client_id,
+            &self.response_uri,
+            self.nonce(),
+            mdoc_generated_nonce,
+            trust,
+            get_signature_verifier,
+        )?;
+
+        document.validate(current_time)?;
+
+        Ok(document.into_claims())
+    }
 }
 
-/// Returns the data elements from the provided [`Document`], while performing
-/// the necessary verifications.
-fn document_verify_into_claims<'a>(
-    document: Document,
-    client_id: &str,
-    response_uri: &str,
-    nonce: &str,
-    mdoc_generated_nonce: &str,
-    get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
-    current_time: u64,
-) -> Result<Claims> {
-    document.verify(
-        client_id,
-        response_uri,
-        nonce,
-        mdoc_generated_nonce,
-        get_signature_verifier,
-    )?;
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
 
-    document.validate(current_time)?;
+    use bh_jws_utils::{Es256Verifier, HasX5Chain as _};
 
-    Ok(document.into_claims())
+    use super::*;
+    use crate::{
+        models::mdl::MDL_NAMESPACE,
+        utils::test::{present_dummy_mdoc, SimpleSigner},
+    };
+
+    #[test]
+    fn test_verify_successful_with_trust() {
+        let verifier = Verifier::from_parts(
+            "client_id".to_owned(),
+            "response_uri".to_owned(),
+            "nonce".to_owned(),
+        );
+
+        let device_response = present_dummy_mdoc(100);
+
+        let expected_claims = vec![Claims(HashMap::from([(
+            MDL_NAMESPACE.into(),
+            HashMap::from([("lastName".into(), "Doe".into())]),
+        )]))];
+
+        let x5chain = SimpleSigner::issuer().x5chain();
+
+        // for simplicity, the root is just the leaf certificate
+        let root = x5chain.leaf_certificate().to_owned();
+
+        let trust = X509Trust::new(vec![root]);
+
+        let claims = verifier
+            .verify(
+                device_response,
+                105,
+                "mdoc_generated_nonce",
+                Some(&trust),
+                |_| Some(&Es256Verifier),
+            )
+            .unwrap();
+
+        assert_eq!(expected_claims, claims);
+    }
+
+    #[test]
+    fn test_verify_fails_issuer_not_trusted() {
+        let verifier = Verifier::from_parts(
+            "client_id".to_owned(),
+            "response_uri".to_owned(),
+            "nonce".to_owned(),
+        );
+
+        let device_response = present_dummy_mdoc(100);
+
+        // no Issuer is trusted (empty `trust`)
+        let trust = X509Trust::new(vec![]);
+
+        let err = verifier
+            .verify(
+                device_response,
+                105,
+                "mdoc_generated_nonce",
+                Some(&trust),
+                |_| Some(&Es256Verifier),
+            )
+            .unwrap_err();
+
+        assert_eq!(err.error, MdocError::X5Chain);
+    }
+
+    #[test]
+    fn test_verify_successful_no_trust() {
+        let verifier = Verifier::from_parts(
+            "client_id".to_owned(),
+            "response_uri".to_owned(),
+            "nonce".to_owned(),
+        );
+
+        let device_response = present_dummy_mdoc(100);
+
+        let expected_claims = vec![Claims(HashMap::from([(
+            MDL_NAMESPACE.into(),
+            HashMap::from([("lastName".into(), "Doe".into())]),
+        )]))];
+
+        // every Issuer is trusted (`trust` not provided)
+        let claims = verifier
+            .verify(device_response, 105, "mdoc_generated_nonce", None, |_| {
+                Some(&Es256Verifier)
+            })
+            .unwrap();
+
+        assert_eq!(expected_claims, claims);
+    }
 }

@@ -8,6 +8,11 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- The `Verifier` can now optionally verify the Issuer's authenticity.
+- `Claims` now implements `Debug`, `Clone`, and `PartialEq`.
+
 ## [0.1.0] - 2025-04-22
 
 ### Added
@@ -16,7 +21,6 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
   `bhmdoc` library.
 - README.md describing the crate.
 - Initial version of the `bhmdoc` crate.
-
 
 [Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhmdoc/v0.1.0...HEAD>
 [0.1.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.1.0>
