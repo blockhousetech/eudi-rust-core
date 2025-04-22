@@ -12,6 +12,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 - The `Verifier` can now optionally verify the Issuer's authenticity.
 - `Claims` now implements `Debug`, `Clone`, and `PartialEq`.
+- The _mdoc_ Device `Signer` must now match the `DeviceKey` signed by
+the Issuer.
 
 ## [0.1.0] - 2025-04-22
 

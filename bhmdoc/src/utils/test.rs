@@ -15,17 +15,11 @@
 
 use std::collections::HashMap;
 
-use bh_jws_utils::{Es256Verifier, HasX5Chain, Signer, SigningAlgorithm};
-use bhx5chain::X5Chain;
-use coset::CoseKeyBuilder;
-use openssl::{
-    bn::{BigNum, BigNumContext},
-    ec::{EcGroup, EcKey},
-    ecdsa::EcdsaSig,
-    nid::Nid,
-    pkey::Private,
-    x509::X509,
+use bh_jws_utils::{
+    openssl_ec_pub_key_to_jwk, Es256Verifier, HasX5Chain, JwkPublic, Signer, SigningAlgorithm,
 };
+use bhx5chain::X5Chain;
+use openssl::{ec::EcKey, ecdsa::EcdsaSig, pkey::Private, x509::X509};
 use rand::thread_rng;
 
 use crate::{
@@ -107,6 +101,11 @@ impl Signer for SimpleSigner {
 
         Ok(ser_sig)
     }
+
+    fn public_jwk(&self) -> Result<JwkPublic, Box<dyn std::error::Error + Send + Sync>> {
+        let pkey = EcKey::from_public_key(self.key.group(), self.key.public_key()).unwrap();
+        Ok(openssl_ec_pub_key_to_jwk(&pkey, None).unwrap())
+    }
 }
 
 impl HasX5Chain for SimpleSigner {
@@ -117,23 +116,9 @@ impl HasX5Chain for SimpleSigner {
 
 pub(crate) fn dummy_device_key() -> (SimpleSigner, DeviceKey) {
     let signer = SimpleSigner::device();
+    let device_key = DeviceKey::from_jwk(&signer.public_jwk().unwrap()).unwrap();
 
-    let group = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).unwrap();
-    let mut ctx = BigNumContext::new().unwrap();
-    let mut x = BigNum::new().unwrap();
-    let mut y = BigNum::new().unwrap();
-    signer
-        .key
-        .public_key()
-        .affine_coordinates(group.as_ref(), &mut x, &mut y, &mut ctx)
-        .unwrap();
-
-    let pub_key = DeviceKey(
-        CoseKeyBuilder::new_ec2_pub_key(coset::iana::EllipticCurve::P_256, x.to_vec(), y.to_vec())
-            .build(),
-    );
-
-    (SimpleSigner::device(), pub_key)
+    (signer, device_key)
 }
 
 pub(crate) fn issue_dummy_mdoc(current_time: u64) -> IssuedDocument {

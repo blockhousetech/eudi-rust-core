@@ -33,7 +33,7 @@ use bherror::traits::{
 use bhx5chain::{X509Trust, X5Chain};
 use coset::{
     iana::{EnumI64 as _, HeaderParameter},
-    Algorithm, CoseKey, Header, Label, RegisteredLabelWithPrivate,
+    Algorithm, CborOrdering, CoseKey, Header, Label, RegisteredLabelWithPrivate,
 };
 
 use super::response::{DigestID, IssuerNameSpaces, IssuerSignedItemBytes};
@@ -610,6 +610,13 @@ impl DeviceKey {
     /// Returns a JWK representation of the underlying `COSE_Key`.
     pub fn as_jwk(&self) -> Result<serde_json::Map<String, serde_json::Value>> {
         cose_key_to_jwk(&self.0)
+    }
+
+    /// Re-order the contents of the key lexicographically, as per
+    /// `Section 4.2.1` of the `RFC 8949` (_Core Deterministic Encoding
+    /// Requirements_).
+    pub(crate) fn canonicalize(&mut self) {
+        self.0.canonicalize(CborOrdering::Lexicographic);
     }
 }
 
