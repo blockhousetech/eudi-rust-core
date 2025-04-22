@@ -179,7 +179,7 @@ impl Document {
             .verify_signature(trust, &get_signature_verifier)
             .ctx(|| "issuer signature")?;
 
-        let device_key = self.issuer_signed.issuer_auth.device_key()?;
+        let device_key = self.issuer_signed.device_key()?;
 
         self.device_signed
             .verify_signature(
@@ -309,6 +309,12 @@ impl IssuerSigned {
             .as_ref()
             .map(IssuerNameSpaces::claims)
             .unwrap_or_else(|| BorrowedClaims(HashMap::new()))
+    }
+
+    /// Returns the signed [`DeviceKey`] of the respective `mdoc` Device the
+    /// credential is issued to.
+    pub fn device_key(&self) -> Result<DeviceKey> {
+        self.issuer_auth.device_key()
     }
 
     /// Verifies the issuer's signature of the underlying [`IssuerAuth`].

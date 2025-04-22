@@ -16,6 +16,7 @@
 //! This module defines a [`Device`] type that works with an issued Credential.
 
 use bh_jws_utils::{SignatureVerifier, SigningAlgorithm};
+use bherror::traits::ForeignBoxed as _;
 
 use crate::{
     models::{
@@ -29,7 +30,7 @@ use crate::{
         },
         DeviceResponse,
     },
-    Result,
+    DeviceKey, MdocError, Result,
 };
 
 /// This represents an `mDoc` device.
@@ -79,8 +80,6 @@ impl Device {
 
         issuer_signed.validate_device(current_time, &doc_type)?;
 
-        // TODO(issues/23): Validate the device public key as well.
-
         Ok(Self {
             doc_type,
             issuer_signed,
@@ -111,14 +110,17 @@ impl Device {
     /// # Errors
     ///
     /// The method can result with the following errors:
-    /// - [`DeviceAuthentication`][crate::MdocError::DeviceAuthentication] if
-    ///   the payload for the Device's signature fails to compute,
-    /// - [`Signing`][crate::MdocError::Signing] if the Device's signature fails
-    ///   to compute,
-    /// - [`DocumentExpired`][crate::MdocError::DocumentExpired] if the
-    ///   underlying [`Document`] expired,
-    /// - [`DocumentNotYetValid`][crate::MdocError::DocumentNotYetValid] if the
-    ///   underlying [`Document`] is not valid yet.
+    /// - [`DeviceAuthentication`][MdocError::DeviceAuthentication] if the
+    ///   payload for the Device's signature fails to compute,
+    /// - [`Signing`][MdocError::Signing] if the Device's signature fails to
+    ///   compute,
+    /// - [`DocumentExpired`][MdocError::DocumentExpired] if the underlying
+    ///   [`Document`] expired,
+    /// - [`DocumentNotYetValid`][MdocError::DocumentNotYetValid] if the
+    ///   underlying [`Document`] is not valid yet,
+    /// - [`InvalidDeviceSigner`][MdocError::InvalidDeviceSigner] if the
+    ///   provided `mdoc` Device [`Signer`][bh_jws_utils::Signer] does not match
+    ///   the signed public key of the `mdoc` Device.
     ///
     /// # Notes
     ///
@@ -140,6 +142,9 @@ impl Device {
         mdoc_generated_nonce: &str,
         signer: &impl bh_jws_utils::Signer,
     ) -> Result<DeviceResponse> {
+        // the provided `signer` must match the signed device public key
+        self.check_device_key(signer)?;
+
         // find the appropriate `DocRequest` based on the `doc_type`
         let Some(doc_request) = request.find_by_doc_type(&self.doc_type) else {
             // if the `doc_type` is absent, return the empty `DeviceResponse`
@@ -171,7 +176,7 @@ impl Device {
 
         let document = Document::new(self.doc_type.clone(), issuer_signed, device_signed);
 
-        // perform non-signature validations, e.g. don't issue expired or
+        // perform non-signature validations, e.g. don't present expired or
         // not-yet-valid credential
         document.validate(current_time)?;
 
@@ -186,6 +191,27 @@ impl Device {
     /// Extracts and returns the [`BorrowedClaims`].
     pub fn claims(&self) -> (&DocType, BorrowedClaims) {
         (&self.doc_type, self.issuer_signed.claims())
+    }
+
+    /// Verify that the [`DeviceKey`] signed by the `mdoc` Issuer matches the
+    /// one from the provided `signer`.
+    fn check_device_key(&self, signer: &impl bh_jws_utils::Signer) -> Result<()> {
+        let mut signed_device_key = self.issuer_signed.device_key()?;
+        signed_device_key.canonicalize();
+
+        let mut signer_device_key =
+            DeviceKey::from_jwk(&signer.public_jwk().foreign_boxed_err(|| {
+                MdocError::InvalidDeviceSigner("unable to fetch public JWK".to_owned())
+            })?)?;
+        signer_device_key.canonicalize();
+
+        if signed_device_key != signer_device_key {
+            return Err(bherror::Error::root(MdocError::InvalidDeviceSigner(
+                "public key does not match the signed one".to_owned(),
+            )));
+        }
+
+        Ok(())
     }
 }
 
@@ -545,5 +571,40 @@ mod tests {
         )]);
 
         assert_eq!(expected_claims, claims);
+    }
+
+    #[test]
+    fn test_present_check_device_key() {
+        let device = issue_dummy_mdoc_to_device(100);
+
+        // the signer is correct
+        let _device_response = device
+            .present(
+                105,
+                &DeviceRequest::new(vec![]),
+                "client_id",
+                "response_uri",
+                "nonce",
+                "mdoc_generated_nonce",
+                &SimpleSigner::device(), // use the correct signer
+            )
+            .unwrap();
+
+        // the signer is wrong
+        let err = device
+            .present(
+                110,
+                &DeviceRequest::new(vec![]),
+                "client_id",
+                "response_uri",
+                "nonce",
+                "mdoc_generated_nonce",
+                &SimpleSigner::issuer(), // use the wrong signer
+            )
+            .unwrap_err();
+        assert_matches!(
+            err.error,
+            MdocError::InvalidDeviceSigner(s) if s == "public key does not match the signed one"
+        );
     }
 }

@@ -101,6 +101,9 @@ pub enum MdocError {
     /// timestamp.
     #[strum(to_string = "{0} seconds overflows time")]
     InvalidTime(u64),
+    /// The provided Device [`Signer`][bh_jws_utils::Signer] is invalid.
+    #[strum(to_string = "Invalid Device Signer: {0}")]
+    InvalidDeviceSigner(String),
 }
 
 impl bherror::BhError for MdocError {}
