@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-04-22
+
 ### Added
 
 - The `public_jwk` method on the `Signer` `trait` that exposes the public key of
@@ -29,6 +31,7 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - Initial version of the `bh-jws-utils` crate.
 
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.2.0...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.3.0...HEAD>
+[0.3.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.3.0>
 [0.2.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.2.0>
 [0.1.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.1.0>
