@@ -74,7 +74,8 @@ impl Device {
     ) -> Result<Self> {
         let issuer_signed = IssuerSigned::from_base64_url(issuer_signed)?;
 
-        issuer_signed.verify_signature(get_signature_verifier)?;
+        // `trust: None` => Device does not verify the Issuer's authenticity
+        issuer_signed.verify_signature(None, get_signature_verifier)?;
 
         issuer_signed.validate_device(current_time, &doc_type)?;
 
@@ -531,7 +532,7 @@ mod tests {
             .unwrap();
 
         let claims = verifier
-            .verify(device_response, 101, "mdoc_generated_nonce", |_| {
+            .verify(device_response, 101, "mdoc_generated_nonce", None, |_| {
                 Some(&Es256Verifier)
             })
             .unwrap();

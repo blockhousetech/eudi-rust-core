@@ -34,6 +34,7 @@ use crate::utils::json::cbor_to_json;
 /// This just wraps the
 /// [`HashMap<NameSpace, HashMap<DataElementIdentifier, DataElementValue>>`],
 /// providing the [`into_json`][Claims::into_json] functionality.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Claims(pub HashMap<NameSpace, HashMap<DataElementIdentifier, DataElementValue>>);
 
 impl Claims {

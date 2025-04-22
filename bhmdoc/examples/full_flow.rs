@@ -169,6 +169,7 @@ fn main() {
             device_response,
             current_time,
             &mdoc_generated_nonce,
+            None,
             // Currently we only support ES256.
             |_alg| Some(&Es256Verifier),
         )

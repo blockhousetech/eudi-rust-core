@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use base64::Engine as _;
 use bh_jws_utils::{SignatureVerifier, SigningAlgorithm};
 use bherror::traits::{ErrorContext as _, ForeignError as _};
+use bhx5chain::X509Trust;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -161,6 +162,8 @@ impl Document {
 
     /// Verifies both issuer signature and device signature or MAC of this [`Document`].
     ///
+    /// If [`X509Trust`] is provided, the Issuer's authenticity is verified as well.
+    ///
     /// **Note**: currently, only the signature is supported for the `DeviceAuth`. Verifying the
     /// MAC results in the [DeviceMac][MdocError::DeviceMac] error.
     pub(crate) fn verify<'a>(
@@ -169,10 +172,11 @@ impl Document {
         response_uri: &str,
         nonce: &str,
         mdoc_generated_nonce: &str,
+        trust: Option<&X509Trust>,
         get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
     ) -> Result<()> {
         self.issuer_signed
-            .verify_signature(&get_signature_verifier)
+            .verify_signature(trust, &get_signature_verifier)
             .ctx(|| "issuer signature")?;
 
         let device_key = self.issuer_signed.issuer_auth.device_key()?;
@@ -308,11 +312,15 @@ impl IssuerSigned {
     }
 
     /// Verifies the issuer's signature of the underlying [`IssuerAuth`].
+    ///
+    /// If [`X509Trust`] is provided, the Issuer's authenticity is verified as well.
     pub(crate) fn verify_signature<'a>(
         &self,
+        trust: Option<&X509Trust>,
         get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
     ) -> Result<()> {
-        self.issuer_auth.verify_signature(get_signature_verifier)
+        self.issuer_auth
+            .verify_signature(trust, get_signature_verifier)
     }
 
     /// Validates the claims of the underlying [`IssuerAuth`].
@@ -1001,9 +1009,14 @@ x1ZWJGQ3FlbGVtZW50SWRlbnRpZmllcm9pc3N1aW5nX2NvdW50cnk=";
         let mdoc_generated_nonce = MDOC_GENERATED_NONCE;
 
         document
-            .verify(client_id, response_uri, nonce, mdoc_generated_nonce, |_| {
-                Some(&Es256Verifier)
-            })
+            .verify(
+                client_id,
+                response_uri,
+                nonce,
+                mdoc_generated_nonce,
+                None,
+                |_| Some(&Es256Verifier),
+            )
             .unwrap();
     }
 
@@ -1018,9 +1031,14 @@ x1ZWJGQ3FlbGVtZW50SWRlbnRpZmllcm9pc3N1aW5nX2NvdW50cnk=";
         let mdoc_generated_nonce = MDOC_GENERATED_NONCE;
 
         let err = document
-            .verify(client_id, response_uri, nonce, mdoc_generated_nonce, |_| {
-                Some(&Es256Verifier)
-            })
+            .verify(
+                client_id,
+                response_uri,
+                nonce,
+                mdoc_generated_nonce,
+                None,
+                |_| Some(&Es256Verifier),
+            )
             .unwrap_err();
 
         assert_matches!(err.error, MdocError::InvalidSignature);
@@ -1037,9 +1055,14 @@ x1ZWJGQ3FlbGVtZW50SWRlbnRpZmllcm9pc3N1aW5nX2NvdW50cnk=";
         let mdoc_generated_nonce = "invalid nonce";
 
         let err = document
-            .verify(client_id, response_uri, nonce, mdoc_generated_nonce, |_| {
-                Some(&Es256Verifier)
-            })
+            .verify(
+                client_id,
+                response_uri,
+                nonce,
+                mdoc_generated_nonce,
+                None,
+                |_| Some(&Es256Verifier),
+            )
             .unwrap_err();
 
         assert_matches!(err.error, MdocError::InvalidSignature);
@@ -1056,9 +1079,14 @@ x1ZWJGQ3FlbGVtZW50SWRlbnRpZmllcm9pc3N1aW5nX2NvdW50cnk=";
         let mdoc_generated_nonce = MDOC_GENERATED_NONCE;
 
         let err = document
-            .verify(client_id, response_uri, nonce, mdoc_generated_nonce, |_| {
-                Some(&Es256Verifier)
-            })
+            .verify(
+                client_id,
+                response_uri,
+                nonce,
+                mdoc_generated_nonce,
+                None,
+                |_| Some(&Es256Verifier),
+            )
             .unwrap_err();
 
         assert_matches!(err.error, MdocError::InvalidSignature);
@@ -1075,9 +1103,14 @@ x1ZWJGQ3FlbGVtZW50SWRlbnRpZmllcm9pc3N1aW5nX2NvdW50cnk=";
         let mdoc_generated_nonce = MDOC_GENERATED_NONCE;
 
         let err = document
-            .verify(client_id, response_uri, nonce, mdoc_generated_nonce, |_| {
-                Some(&Es256Verifier)
-            })
+            .verify(
+                client_id,
+                response_uri,
+                nonce,
+                mdoc_generated_nonce,
+                None,
+                |_| Some(&Es256Verifier),
+            )
             .unwrap_err();
 
         assert_matches!(err.error, MdocError::InvalidSignature);
@@ -1094,9 +1127,14 @@ x1ZWJGQ3FlbGVtZW50SWRlbnRpZmllcm9pc3N1aW5nX2NvdW50cnk=";
         let mdoc_generated_nonce = MDOC_GENERATED_NONCE;
 
         let err = document
-            .verify(client_id, response_uri, nonce, mdoc_generated_nonce, |_| {
-                None
-            })
+            .verify(
+                client_id,
+                response_uri,
+                nonce,
+                mdoc_generated_nonce,
+                None,
+                |_| None,
+            )
             .unwrap_err();
 
         assert_matches!(err.error, MdocError::MissingSignatureVerifier(alg) if alg == SigningAlgorithm::Es256);
@@ -1120,9 +1158,14 @@ x1ZWJGQ3FlbGVtZW50SWRlbnRpZmllcm9pc3N1aW5nX2NvdW50cnk=";
             .signature = hex::decode("0a72d6c63a2eb9f0ef6ccc70a7b06c193d9d279d637d427c9ee2b41ce430041408bd6ea822e9457591d52e78ed6efacfc5e05d485fb21574d9c75af456013377").unwrap();
 
         let err = document
-            .verify(client_id, response_uri, nonce, mdoc_generated_nonce, |_| {
-                Some(&Es256Verifier)
-            })
+            .verify(
+                client_id,
+                response_uri,
+                nonce,
+                mdoc_generated_nonce,
+                None,
+                |_| Some(&Es256Verifier),
+            )
             .unwrap_err();
 
         assert_matches!(err.error, MdocError::InvalidSignature)
