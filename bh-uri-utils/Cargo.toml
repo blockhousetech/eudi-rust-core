@@ -1,0 +1,16 @@
+[package]
+name = "bh-uri-utils"
+version = "0.1.0"
+authors = ["TBTL Tech <tech@tbtl.com>"]
+description = "TBTL's utility library for working with URIs."
+edition = "2021"
+keywords = ["tbtl", "uri", "uri-utils"]
+license-file = "../COPYING"
+readme = "README.md"
+repository = "https://github.com/blockhousetech/eudi-rust-core"
+
+[dependencies]
+bherror = "0.1"
+iref = "3.2.2"
+reqwest = "0.12.5"
+strum_macros = "0.27"
