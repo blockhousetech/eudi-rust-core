@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["bh-jws-utils", "bherror", "bhmdoc", "bhx5chain"]
+members = ["bh-jws-utils", "bh-uri-utils", "bherror", "bhmdoc", "bhx5chain"]
 
 [profile.ci]
 inherits = "dev"

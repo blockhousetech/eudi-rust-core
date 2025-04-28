@@ -25,6 +25,7 @@ on:
         options:
           - all
           - bh-jws-utils
+          - bh-uri-utils
           - bherror
           - bhmdoc
           - bhx5chain
