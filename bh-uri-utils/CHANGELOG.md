@@ -8,7 +8,7 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
-## [0.1.0] - <INSERT-DATE-OF-RELEASE-ON-GITHUB>
+## [0.1.0] - 2025-04-28
 
 ### Added
 
