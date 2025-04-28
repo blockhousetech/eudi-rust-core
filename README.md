@@ -4,12 +4,16 @@ Core Rust crates used in The Blockhouse Technology Ltd. (TBTL) EUDI efforts.
 
 ## Crates Overview
 
-### [bherror](./bherror/README.md)
+### [bhmdoc](./bhmdoc/README.md)
 
-Provides a robust error handling mechanism tailored for TBTL’s codebase. It
-includes versatile error types (`Error`, `ErrorDyn`), comprehensive error
-context propagation, and integration (such as `axum` adapters) to simplify
-error logging and reporting.
+Provides functionality for working with the mDL/mdoc specification as defined
+in [ISO/IEC 18013-5](https://www.iso.org/standard/69084.html) and expanded on
+in [ISO/IEC TS 18013-7:2024](https://www.iso.org/standard/82772.html) to
+include integration with [OpenID for Verifiable
+Credentials](https://openid.net/sg/openid4vc/specifications/).
+
+The crate focuses on the issuing, presenting, and verifying of mdoc documents
+using the `Issuer`, `Device`, and `Verifier` structs.
 
 ### [bhx5chain](./bhx5chain/README.md)
 
@@ -24,16 +28,24 @@ includes utilities for signing and verifying JWTs using well-defined traits
 (`JwtSigner` and `JwtVerifier`) and implementations (e.g., an OpenSSL-backed
 signer for ECDSA keys).
 
-### [bhmdoc](./bhmdoc/README.md)
+### [bherror](./bherror/README.md)
 
-Provides functionality for working with the mDL/mdoc specification as defined
-in [ISO/IEC 18013-5](https://www.iso.org/standard/69084.html) and expanded on
-in [ISO/IEC TS 18013-7:2024](https://www.iso.org/standard/82772.html) to
-include integration with [OpenID for Verifiable
-Credentials](https://openid.net/sg/openid4vc/specifications/).
+Provides a robust error handling mechanism tailored for TBTL’s codebase. It
+includes versatile error types (`Error`, `ErrorDyn`), comprehensive error
+context propagation, and integration (such as `axum` adapters) to simplify
+error logging and reporting.
 
-The crate focuses on the issuing, presenting, and verifying of mdoc documents
-using the `Issuer`, `Device`, and `Verifier` structs.
+### [bh-uri-utils](./bh-uri-utils/README.md]
+
+Provides a collection of utility functions for working with URIs across various
+Rust libraries.  This crate harmonizes the behavior of different URI
+implementations (e.g. handling prefixes, suffixes, and conversions) to prevent
+unexpected bugs.
+
+NOTE: The crate is primarily intended for use within TBTL projects.  If you are
+working outside TBTL, consider using a well-adopted crate such as
+[iref](https://crates.io/crates/iref) or the URI solutions provided by your web
+framework of choice.
 
 ## License
 
