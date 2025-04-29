@@ -35,7 +35,7 @@ includes versatile error types (`Error`, `ErrorDyn`), comprehensive error
 context propagation, and integration (such as `axum` adapters) to simplify
 error logging and reporting.
 
-### [bh-uri-utils](./bh-uri-utils/README.md]
+### [bh-uri-utils](./bh-uri-utils/README.md)
 
 Provides a collection of utility functions for working with URIs across various
 Rust libraries.  This crate harmonizes the behavior of different URI
