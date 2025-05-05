@@ -111,4 +111,4 @@ jobs:
           body: |
             Check out the full [CHANGELOG.md](https://github.com/blockhousetech/eudi-rust-core/blob/main/${{ inputs.crate }}/CHANGELOG.md).
 
-            ${{ needs.release-validations.outputs.changelog-entry }}"
+            ${{ needs.release-validations.outputs.changelog-entry }}
