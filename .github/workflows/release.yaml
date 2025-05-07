@@ -8,6 +8,7 @@ on:
         type: choice
         options:
           - bh-jws-utils
+          - bh-status-list
           - bh-uri-utils
           - bherror
           - bhmdoc

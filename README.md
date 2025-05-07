@@ -47,6 +47,12 @@ working outside TBTL, consider using a well-adopted crate such as
 [iref](https://crates.io/crates/iref) or the URI solutions provided by your web
 framework of choice.
 
+### [bh-status-list](./bh-status-list/README.md)
+
+This library provides functionality for working with status list data structures
+as defined in the [IETF Token Status List
+specification](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-03)
+
 ## License
 
 <sup>

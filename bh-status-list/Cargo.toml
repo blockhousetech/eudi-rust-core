@@ -1,0 +1,26 @@
+[package]
+name = "bh-status-list"
+version = "0.1.0"
+authors = ["TBTL Tech <tech@tbtl.com>"]
+categories = ["authentication", "cryptography", "encoding"]
+description = "TBTL's library for IETF Token Status List specification."
+edition = "2021"
+keywords = ["status-list", "tbtl", "token-status-list"]
+license-file = "../COPYING"
+readme = "README.md"
+repository = "https://github.com/blockhousetech/eudi-rust-core"
+
+[dependencies]
+base64 = "0.22"
+bh-jws-utils = "0.3"
+bherror = "0.1"
+flate2 = "1.0"
+iref = { version = "3.2", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_repr = "0.1"
+strum_macros = "0.27"
+
+[dev-dependencies]
+rand = "0.8"
+serde_json = "1.0"
+tokio-test = "0.4"
