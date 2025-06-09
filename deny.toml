@@ -21,6 +21,7 @@ allow = [
 exceptions = [
     # We publish our crates under AGPLv3
     { crate = "bh-jws-utils", allow = ["AGPL-3.0"] },
+    { crate = "bh-sd-jwt", allow = ["AGPL-3.0"] },
     { crate = "bh-status-list", allow = ["AGPL-3.0"] },
     { crate = "bh-uri-utils", allow = ["AGPL-3.0"] },
     { crate = "bherror", allow = ["AGPL-3.0"] },

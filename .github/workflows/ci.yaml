@@ -25,6 +25,7 @@ on:
         options:
           - all
           - bh-jws-utils
+          - bh-sd-jwt
           - bh-status-list
           - bh-uri-utils
           - bherror
