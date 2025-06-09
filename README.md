@@ -15,6 +15,16 @@ Credentials](https://openid.net/sg/openid4vc/specifications/).
 The crate focuses on the issuing, presenting, and verifying of mdoc documents
 using the `Issuer`, `Device`, and `Verifier` structs.
 
+### [bh-sd-jwt](./bh-sd-jwt/README.md)
+
+This library provides functionality for working with the SD-JWT format for
+Verifiable Credentials as defined in the [IETF SD-JWT-based Verifiable
+Credentials
+specification](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc)
+and the mechanism that allows for selective disclosure of individual elements of
+JSON data structure as defined in the [IETF Selective Disclosure for JWTs
+specification](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-selective-disclosure-jwt).
+
 ### [bhx5chain](./bhx5chain/README.md)
 
 Focuses on the management and validation of ordered X.509 certificate chains as

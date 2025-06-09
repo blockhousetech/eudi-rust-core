@@ -1,0 +1,38 @@
+[package]
+name = "bh-sd-jwt"
+version = "0.1.0"
+authors = ["TBTL Tech <tech@tbtl.com>"]
+categories = ["authentication", "cryptography", "encoding"]
+description = "TBTL's library for handling SD-JWT specification."
+edition = "2021"
+keywords = ["openid4vc", "sd-jwt", "tbtl"]
+license-file = "../COPYING"
+readme = "README.md"
+repository = "https://github.com/blockhousetech/eudi-rust-core"
+
+[dependencies]
+base64 = "0.21.7"
+bh-jws-utils = "0.3"
+bh-status-list = "0.1"
+bh-uri-utils = "0.1"
+bherror = "0.1"
+bhx5chain = "0.2"
+futures = "0.3.31"
+http = "1.1.0"
+iref = { version = "3.1.3", features = ["serde"] }
+lazy_static = "1.4.0"
+openssl = "0.10"
+rand_core = "0.6.4"
+reqwest = { version = "0.12.5", features = ["json"] }
+serde = { version = "1.0.195", features = ["derive"] }
+serde_json = { version = "1.0.111", features = ["preserve_order"] }
+serde_json_path = "0.7.2"
+strum_macros = "0.27"
+tracing = "0.1"
+yoke = { version = "0.7.4", features = ["derive"] }
+
+[dev-dependencies]
+bhx5chain = { version = "0.2", features = ["test-utils"] }
+hex = "0.4.3"
+rand = "0.8.5"
+tokio = { version = "1.37.0", features = ["rt-multi-thread", "macros"] }
