@@ -66,5 +66,5 @@ specification](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-lis
 ## License
 
 <sup>
-Licensed under <a href="../COPYING">GNU Affero General Public License, Version 3</a>.
+Licensed under <a href="COPYING">GNU Affero General Public License, Version 3</a>.
 </sup>
