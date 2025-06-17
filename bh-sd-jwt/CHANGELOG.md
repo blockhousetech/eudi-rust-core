@@ -8,7 +8,7 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
-## [0.1.1] - 2025-06-17
+## [0.2.0] - 2025-06-17
 
 ### Changed
 
