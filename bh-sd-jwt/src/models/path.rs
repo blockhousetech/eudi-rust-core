@@ -80,8 +80,9 @@ impl std::fmt::Display for DisplayWrapper<'_, JsonNodePath<'_>> {
         write!(f, "$")?;
         for segment in self.0 {
             match segment {
-                // we use `['{}']` format instead of `.{}` so we can support keys that contain dots
-                JsonNodePathSegment::Key(key) => write!(f, "['{}']", key)?,
+                // Use `.{}` to conform to third-party expectations.
+                // Note: this approach does not support keys that contain dots.
+                JsonNodePathSegment::Key(key) => write!(f, ".{}", key)?,
                 JsonNodePathSegment::Index(index) => write!(f, "[{}]", index)?,
             }
         }

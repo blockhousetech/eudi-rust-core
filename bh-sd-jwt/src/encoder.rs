@@ -576,7 +576,7 @@ pub(crate) mod tests {
 
         assert_eq!(
             error,
-            IssuerError::NonExistentPath("$['address']['non_existent_key']".to_string())
+            IssuerError::NonExistentPath("$.address.non_existent_key".to_string())
         );
     }
 
@@ -601,7 +601,7 @@ pub(crate) mod tests {
 
         assert_eq!(
             encoder_conceal(claims, salts_and_paths).unwrap_err().error,
-            IssuerError::NonExistentPath("$['address'][3]".to_string())
+            IssuerError::NonExistentPath("$.address[3]".to_string())
         );
     }
 
@@ -672,7 +672,7 @@ pub(crate) mod tests {
         .unwrap_err()
         .error;
 
-        assert_eq!(error, IssuerError::DuplicatePath("$['sub']".to_string()));
+        assert_eq!(error, IssuerError::DuplicatePath("$.sub".to_string()));
     }
 
     #[test]

@@ -8,6 +8,15 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-06-17
+
+### Changed
+
+- Updated `JsonNodePathSegment` handling to use the `$.node1.node2`
+  path format instead of the previous `$['node1']['node2']` format.
+  This change was made to align with third-party holders,
+  who use the dot notation format.
+
 ## [0.1.0] - 2025-06-10
 
 ### Added
