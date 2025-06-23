@@ -28,4 +28,5 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 
 [Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-sd-jwt/v0.1.0...HEAD>
+[0.2.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.2.0>
 [0.1.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.1.0>
