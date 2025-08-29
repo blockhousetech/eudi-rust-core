@@ -189,7 +189,7 @@ impl Device {
     }
 
     /// Extracts and returns the [`BorrowedClaims`].
-    pub fn claims(&self) -> (&DocType, BorrowedClaims) {
+    pub fn claims(&self) -> (&DocType, BorrowedClaims<'_>) {
         (&self.doc_type, self.issuer_signed.claims())
     }
 

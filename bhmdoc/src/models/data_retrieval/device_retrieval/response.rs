@@ -304,7 +304,7 @@ impl IssuerSigned {
     }
 
     /// Extracts and returns the [`BorrowedClaims`].
-    pub fn claims(&self) -> BorrowedClaims {
+    pub fn claims(&self) -> BorrowedClaims<'_> {
         self.name_spaces
             .as_ref()
             .map(IssuerNameSpaces::claims)
@@ -379,7 +379,7 @@ impl IssuerNameSpaces {
     }
 
     /// Extracts and returns the [`BorrowedClaims`].
-    fn claims(&self) -> BorrowedClaims {
+    fn claims(&self) -> BorrowedClaims<'_> {
         BorrowedClaims(
             self.0
                 .iter()
@@ -590,7 +590,7 @@ impl DeviceSigned {
     }
 
     /// Extracts and returns the [`BorrowedClaims`].
-    pub fn claims(&self) -> BorrowedClaims {
+    pub fn claims(&self) -> BorrowedClaims<'_> {
         self.name_spaces.0.inner.claims()
     }
 
@@ -654,7 +654,7 @@ impl DeviceNameSpaces {
     }
 
     /// Extracts and returns the [`BorrowedClaims`].
-    pub fn claims(&self) -> BorrowedClaims {
+    pub fn claims(&self) -> BorrowedClaims<'_> {
         BorrowedClaims(
             self.0
                 .iter()
