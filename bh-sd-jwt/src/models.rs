@@ -184,7 +184,7 @@ impl SdJwtUnverified<'_> {
 
 impl crate::SdJwt {
     /// Further parse the SD-JWT's JWT and disclosures into a to-be-verified form.
-    pub(crate) fn parse(&self) -> Result<SdJwtUnverified, FormatError> {
+    pub(crate) fn parse(&self) -> Result<SdJwtUnverified<'_>, FormatError> {
         // Despite the documentation of `jwt::Token::parse_unverified`
         // (rightfully) not recommending using it (to prevent reading the
         // contents without prior verification), we need to do this in order to
@@ -286,7 +286,7 @@ impl SdJwtDecoded {
     }
 
     /// Pre-computed map from disclosure path in the reconstructed model to disclosure
-    pub(crate) fn disclosures_by_path(&self) -> &DisclosureByPathTable {
+    pub(crate) fn disclosures_by_path(&self) -> &DisclosureByPathTable<'_> {
         self.disclosures_by_path.get()
     }
 

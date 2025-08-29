@@ -273,7 +273,7 @@ impl KBJwt<jwt::token::Verified> {
     fn get_signature_verifier<'a>(
         kb_jwt: &str,
         get_signature_verifier: impl FnOnce(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
-    ) -> Result<(KBJwtUnverified, &'a dyn SignatureVerifier), KBError> {
+    ) -> Result<(KBJwtUnverified<'_>, &'a dyn SignatureVerifier), KBError> {
         // Despite the documentation of `jwt::Token::parse_unverified`
         // (rightfully) not recommending using it (to prevent reading the
         // contents without prior verification), we need to do this in order to
