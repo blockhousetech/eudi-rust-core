@@ -92,6 +92,31 @@ impl X5Chain {
         Self::new(certs)
     }
 
+    /// Constructs a [`X5Chain`] from a sequence of PEM-encoded strings.
+    ///
+    /// The chain **MUST BE** ordered in such a way that the leaf certificate is at first place,
+    /// then goes its parent, and so on.
+    ///
+    /// # Warning
+    ///
+    /// The chain is at this point **NOT VALIDATED** against any trusted root certificate. In order
+    /// to validate the chain against a trusted root certificate, use the
+    /// [`X5Chain::verify_against_trusted_roots`] method.
+    pub fn from_pem<S: AsRef<str>>(pem: &[S]) -> Result<Self> {
+        let certs = pem
+            .iter()
+            .enumerate()
+            .map(|(i, pem)| {
+                X509::from_pem(pem.as_ref().as_bytes())
+                    .foreign_err(|| Error::X5Chain)
+                    .ctx(|| i)
+            })
+            .collect::<Result<_>>()
+            .ctx(|| "invalid X509 certificate")?;
+
+        Self::new(certs)
+    }
+
     /// Verify the [`X5Chain`] against trusted root certificates.
     ///
     /// The root certificate may be in chain, but it **MUST BE** found in `trust` as well.
@@ -441,6 +466,27 @@ jdc01UGluQ7Pq6abMWPn5OZaPDyCSqpjbw==
 
         // invalid bytes
         let err = X5Chain::from_raw_bytes(&[vec![0u8, 1u8], vec![2u8]]).unwrap_err();
+        assert!(matches!(err.error, Error::X5Chain));
+        assert_empty_error_stack();
+    }
+
+    #[test]
+    fn test_from_pem() {
+        let mut certs = CERTS.split_inclusive("-----END CERTIFICATE-----\n");
+        let leaf = certs.next().unwrap();
+        let intermediary = certs.next().unwrap();
+        let root = certs.next().unwrap();
+
+        // valid chain
+        X5Chain::from_pem(&[leaf, intermediary, root]).unwrap();
+
+        // empty chain is invalid
+        let err = X5Chain::from_pem::<&str>(&[]).unwrap_err();
+        assert!(matches!(err.error, Error::X5Chain));
+        assert_empty_error_stack();
+
+        // invalid PEM
+        let err = X5Chain::from_pem(&["babadeda", "bla"]).unwrap_err();
         assert!(matches!(err.error, Error::X5Chain));
         assert_empty_error_stack();
     }

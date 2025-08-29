@@ -8,6 +8,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- The method `X5Chain::from_pem` for parsing the certificate chain from the PEM format.
+
 ## [0.2.0] - 2025-04-07
 
 ### Removed
