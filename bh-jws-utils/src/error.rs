@@ -49,6 +49,15 @@ pub enum CryptoError {
     /// Error that occurs when the signing algorithm is unsupported
     #[strum(to_string = "Unsupported: {0}")]
     Unsupported(String),
+    /// Error that occurs when a public key is incorrectly formatted or
+    /// otherwise not valid.
+    #[strum(to_string = "Invalid public key")]
+    InvalidPublicKey,
+    /// Error that occurs when public keys which are supposed to be match (e.g.
+    /// between a [`Signer`](crate::Signer) and [`X5Chain`](bhx5chain::X5Chain))
+    /// do not match.
+    #[strum(to_string = "Public key mismatch")]
+    PublicKeyMismatch,
 }
 
 impl bherror::BhError for CryptoError {}

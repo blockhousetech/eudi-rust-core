@@ -68,22 +68,22 @@
 //!     .unwrap();
 //! ```
 
-#[cfg(feature = "openssl")]
 mod openssl_impl;
 
 mod error;
 mod jwk;
 mod traits;
 mod utils;
+mod x509_chain;
 
 pub use error::*;
 pub use jwk::*;
 // Re-export the `jwt` crate
 pub use jwt;
-#[cfg(feature = "openssl")]
 pub use openssl_impl::*;
 pub use traits::*;
 pub use utils::*;
+pub use x509_chain::*;
 
 /// Helper macro with the same syntax as [`serde_json::json`] specialized for
 /// constructing JSON objects.
