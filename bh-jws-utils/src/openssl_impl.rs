@@ -20,7 +20,6 @@ use bherror::{
     traits::{ErrorContext, ForeignError, PropagateError as _},
     Error, Result,
 };
-use bhx5chain::X5Chain;
 use iref::UriBuf;
 use openssl::{
     bn::{BigNum, BigNumContext},
@@ -35,7 +34,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use super::{utils, HasJwkKid, SignatureVerifier, Signer, SigningAlgorithm};
 use crate::{
     error::{CryptoError, FormatError},
-    json_object, BoxError, HasX5Chain, JwkPublic,
+    json_object, BoxError, JwkPublic,
 };
 
 type EcPrivate = EcKey<Private>;
@@ -63,17 +62,14 @@ pub(crate) const ELLIPTIC_CURVE_NID: Nid = Nid::X9_62_PRIME256V1;
 pub struct Es256Signer {
     #[serde(serialize_with = "serialize_key")]
     #[serde(deserialize_with = "deserialize_key")]
-    private_key: EcPrivate,
+    pub(crate) private_key: EcPrivate,
     kid: String,
 }
 
 /// [`Signer`] implementation supporting the `ES256` algorithm (ECDSA using the P-256 curve and the
 /// SHA-256 hash function). This is a wrapper over `Es256Signer` that adds support for producing
-/// `X5Chain`.
-pub struct Es256SignerWithChain {
-    signer: Es256Signer,
-    x5chain: X5Chain,
-}
+/// [`X5Chain`](bhx5chain::X5Chain).
+pub type Es256SignerWithChain = crate::SignerWithChain<Es256Signer>;
 
 const CRV: &str = "P-256";
 const ALG: &str = "ES256";
@@ -182,6 +178,7 @@ pub fn ec_public_affine_coords_to_jwk(
 impl Es256SignerWithChain {
     /// Generate a fresh `ES256` key with the given `kid` field when presented
     /// as a JWK.
+    #[deprecated(note = "use `SignerWithChain::new` instead")]
     pub fn generate(
         kid: String,
         iss: Option<&UriBuf>,
@@ -206,6 +203,7 @@ impl Es256SignerWithChain {
     ///
     /// The `builder` will create valid [`bhx5chain::X5Chain`] with leaf
     /// certificate associated to key from `private_key_pem`.
+    #[deprecated(note = "use `SignerWithChain::new` instead")]
     pub fn from_private_key(
         kid: String,
         iss: Option<&UriBuf>,
@@ -219,11 +217,6 @@ impl Es256SignerWithChain {
             .with_err(|| CryptoError::InvalidX5Chain)?;
 
         Ok(Self { signer, x5chain })
-    }
-
-    /// Get the public key in JWK format.
-    pub fn public_jwk(&self) -> Result<JwkPublic, CryptoError> {
-        self.signer.public_jwk()
     }
 }
 
@@ -255,29 +248,9 @@ impl HasJwkKid for Es256Signer {
     }
 }
 
-impl Signer for Es256SignerWithChain {
-    fn algorithm(&self) -> SigningAlgorithm {
-        self.signer.algorithm()
-    }
-
-    fn sign(&self, message: &[u8]) -> StdResult<Vec<u8>, BoxError> {
-        self.signer.sign(message)
-    }
-
-    fn public_jwk(&self) -> StdResult<JwkPublic, BoxError> {
-        Ok(self.public_jwk()?)
-    }
-}
-
 impl HasJwkKid for Es256SignerWithChain {
     fn jwk_kid(&self) -> &str {
         &self.signer.kid
-    }
-}
-
-impl HasX5Chain for Es256SignerWithChain {
-    fn x5chain(&self) -> X5Chain {
-        self.x5chain.clone()
     }
 }
 
@@ -315,7 +288,7 @@ impl SignatureVerifier for Es256Verifier {
     }
 }
 
-fn public_key_from_jwk_es256(public_key: &JwkPublic) -> Result<EcPublic, FormatError> {
+pub(crate) fn public_key_from_jwk_es256(public_key: &JwkPublic) -> Result<EcPublic, FormatError> {
     check_jwk_field(public_key, "kty", KTY)?;
     check_jwk_field(public_key, "crv", CRV)?;
 
