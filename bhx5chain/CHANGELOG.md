@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-09-03
+
 ### Added
 
 - The method `X5Chain::from_pem` for parsing the certificate chain from the PEM format.
@@ -35,6 +37,7 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - Initial version of the `bhx5chain` crate.
 
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhx5chain/v0.2.0...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhx5chain/v0.2.1...HEAD>
+[0.2.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.2.1>
 [0.2.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.2.0>
 [0.1.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.1.0>
