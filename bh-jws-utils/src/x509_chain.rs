@@ -16,7 +16,10 @@
 use bherror::traits::{ForeignBoxed as _, ForeignError, PropagateError};
 use bhx5chain::X5Chain;
 
-use crate::{BoxError, CryptoError, HasX5Chain, JwkPublic, Signer, SigningAlgorithm};
+use crate::{
+    openssl_impl::public_key_from_jwk_es256, BoxError, CryptoError, HasX5Chain, JwkPublic, Signer,
+    SigningAlgorithm,
+};
 
 /// [`Signer`] decorator with an X.509 certificate chain associated with
 /// the key pair.
@@ -69,11 +72,11 @@ fn public_key_matches<S: Signer>(
         .leaf_certificate_key()
         .with_err(|| CryptoError::InvalidX5Chain)?;
 
-    if leaf_public_key.public_eq(&signer_public_key) {
-        Ok(())
-    } else {
-        Err(bherror::Error::root(CryptoError::PublicKeyMismatch))
+    if !leaf_public_key.public_eq(&signer_public_key) {
+        return Err(bherror::Error::root(CryptoError::PublicKeyMismatch));
     }
+
+    Ok(())
 }
 
 fn signer_public_key_openssl<S: Signer>(
@@ -85,14 +88,13 @@ fn signer_public_key_openssl<S: Signer>(
 
     match signer.algorithm() {
         SigningAlgorithm::Es256 => {
-            let signer_public_key =
-                crate::openssl_impl::public_key_from_jwk_es256(&signer_public_jwk)
-                    .with_err(|| CryptoError::InvalidPublicKey)?;
+            let signer_public_key = public_key_from_jwk_es256(&signer_public_jwk)
+                .with_err(|| CryptoError::InvalidPublicKey)?;
             Ok(openssl::pkey::PKey::from_ec_key(signer_public_key)
                 .foreign_err(|| CryptoError::CryptoBackend)?)
         }
         _ => Err(bherror::Error::root(CryptoError::Unsupported(
-            "only ES256 is currently supported".to_string(),
+            "only ES256 is currently supported".to_owned(),
         ))),
     }
 }

@@ -8,6 +8,31 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- The `SignerWithChain` decorator for generic `Signer`s, a generalization of the
+  previous `Es256SignerWithChain` which used a hardcoded `Signer` implementation.
+
+### Changed
+
+- The `openssl` default Cargo feature no longer exists, but the code it gated is
+  retained. This was done because of two reasons:
+  - an existing public function had silently depended on this default feature;
+  - new code requires the `openssl` dependency for certain cryptographic checks,
+    making it no longer optional and the Cargo feature not really useful.
+
+- The `Es256SignerWithChain` `struct` is now a type alias for the newly added
+  generic `SignerWithChain` specialized with `Es256Signer` as before.
+
+### Deprecated
+
+- The `Es256SignerWithChain` constructors `generate` and `from_private_key` are
+  deprecated in favor of newly added `SignerWithChain::new`.
+
+### Fixed
+
+- Fixed the build of the crate when default features were disabled.
+
 ## [0.3.0] - 2025-04-22
 
 ### Added
