@@ -251,6 +251,10 @@ impl IssuerAuth {
         Ok(mso.into())
     }
 
+    pub(crate) fn validity_info(&self) -> Result<ValidityInfo> {
+        Ok(self.mso()?.validity_info)
+    }
+
     /// Returns the [`DeviceKey`] from the underlying [`MobileSecurityObject`].
     pub fn device_key(&self) -> Result<DeviceKey> {
         Ok(self.mso()?.device_key_info.device_key)
@@ -666,11 +670,19 @@ pub struct KeyInfo(HashMap<i64, ciborium::Value>);
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidityInfo {
-    signed: DateTime,
-    valid_from: DateTime,
-    valid_until: DateTime,
+    /// The timestamp at which the signature was created.
+    pub signed: DateTime,
+
+    /// The timestamp before which the credential is not yet valid.
+    pub valid_from: DateTime,
+
+    /// The timestamp after which the credential is no longer valid.
+    pub valid_until: DateTime,
+
+    /// The timestamp at which the issuing authority infrastructure expects to
+    /// re-sign the credential (and potentially update data elements).
     #[serde(skip_serializing_if = "Option::is_none")]
-    expected_update: Option<DateTime>,
+    pub expected_update: Option<DateTime>,
 }
 
 impl ValidityInfo {

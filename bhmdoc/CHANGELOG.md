@@ -8,6 +8,13 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- The `ValidityInfo` is now publicly exposed, along with all its
+  properties.
+- The `Device` now has a public `validity_info` method that fetches the
+  `ValidityInfo` of the contained credential.
+
 ## [0.2.0] - 2025-04-24
 
 ### Added
