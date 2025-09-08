@@ -1,6 +1,6 @@
 [package]
 name = "bh-sd-jwt"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["TBTL Tech <tech@tbtl.com>"]
 categories = ["authentication", "cryptography", "encoding"]
 description = "TBTL's library for handling SD-JWT specification."
