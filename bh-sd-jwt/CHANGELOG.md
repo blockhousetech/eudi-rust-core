@@ -8,6 +8,11 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- `sub` and `iat` methods on the `IssuerJwt`, that return the
+  corresponding claims.
+
 ## [0.2.0] - 2025-06-17
 
 ### Changed
@@ -25,7 +30,6 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
   `bh-sd-jwt` library.
 - README.md describing the crate.
 - Initial version of the `bh-sd-jwt` crate.
-
 
 [Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-sd-jwt/v0.1.0...HEAD>
 [0.2.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.2.0>
