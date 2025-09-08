@@ -296,12 +296,26 @@ impl IssuerJwt {
         self.claims.insert("sub".to_owned(), sub.into());
     }
 
+    /// Returns the `sub` claim.
+    ///
+    /// [`None`] is returned if it is missing, or it is not a string.
+    pub fn sub(&self) -> Option<&str> {
+        self.claims.get("sub").and_then(serde_json::Value::as_str)
+    }
+
     /// Adds the `iat` claim to the `JWT`.
     ///
     /// If the `iat` claim already exists, the current value will be overwritten
     /// with the new one.
     pub fn add_iat_claim(&mut self, iat: SecondsSinceEpoch) {
         self.claims.insert("iat".to_owned(), iat.into());
+    }
+
+    /// Returns the `iat` claim.
+    ///
+    /// [`None`] is returned if it is missing, or it is not a `u64`.
+    pub fn iat(&self) -> Option<SecondsSinceEpoch> {
+        self.claims.get("iat").and_then(serde_json::Value::as_u64)
     }
 
     /// Serializes the Issuer's JWT into a `JSON` object.
