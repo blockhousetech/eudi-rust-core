@@ -116,6 +116,9 @@ fn main() {
     )
     .unwrap();
 
+    // Check that Validity info exists.
+    let _ = device.validity_info().expect("Validity info should exist");
+
     // Build the `DocRequest` that contains a collection of claims that the
     // device will present to the verifier.
     // We do not need to request all claims, only the ones we are interested in.

@@ -23,6 +23,7 @@ use crate::{
         data_retrieval::{
             common::DocType,
             device_retrieval::{
+                issuer_auth::ValidityInfo,
                 request::DeviceRequest,
                 response::{DeviceSigned, Document, IssuerNameSpaces, IssuerSigned},
             },
@@ -191,6 +192,11 @@ impl Device {
     /// Extracts and returns the [`BorrowedClaims`].
     pub fn claims(&self) -> (&DocType, BorrowedClaims<'_>) {
         (&self.doc_type, self.issuer_signed.claims())
+    }
+
+    /// Returns the [`ValidityInfo`] of the underlying credential.
+    pub fn validity_info(&self) -> Result<ValidityInfo> {
+        self.issuer_signed.issuer_auth.validity_info()
     }
 
     /// Verify that the [`DeviceKey`] signed by the `mdoc` Issuer matches the

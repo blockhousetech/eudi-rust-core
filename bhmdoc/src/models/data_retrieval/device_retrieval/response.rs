@@ -211,7 +211,7 @@ pub struct DocumentError(DocType, ErrorCode);
 pub struct IssuerSigned {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) name_spaces: Option<IssuerNameSpaces>,
-    issuer_auth: IssuerAuth,
+    pub(crate) issuer_auth: IssuerAuth,
 }
 
 impl IssuerSigned {
