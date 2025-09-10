@@ -27,7 +27,7 @@
 //!
 //! We also have a [`JwtX5Chain`] type which should be used when working with JSON Web Token (JWT).
 //! This should only be treated as a "wrapper" type around [`X5Chain`], and as such isn't meant for
-//! any manipulation of the `x5chain` itself.
+//! any manipulation of the certificate chain itself.
 //!
 //! # Examples
 //!
@@ -37,7 +37,7 @@
 //! The following example assumes that is the case for `*_certificate` variables.
 //!
 //! ```ignore
-//! let x5chain = bhx5chain::X5Chain::new(vec![issuer_certificate, intermediary_certificate])
+//! let x5chain = bhx5chain::X5Chain::new(vec![leaf_certificate, intermediary_certificate])
 //!     .expect("valid x5chain");
 //!
 //! let trust = bhx5chain::X509Trust::new(vec![trusted_root_certificate]);
@@ -49,8 +49,10 @@
 //!
 //! ## Advanced Use
 //!
-//! If you need to create multiple Issuer certificates during the runtime but base the `x5chain` on
-//! some intermediary certificates & private key, you should use the [`Builder`].
+//! If you need to create multiple leaf certificates during the runtime but base
+//! the [`X5Chain`] on some intermediary certificates & private key, you could
+//! use the [`Builder`]. (Note that this is not a production-grade CA
+//! implementation.)
 //!
 //! ```no_run
 //! let intermediary_private_key = std::fs::read_to_string("path-to-intermediary-private-key.pem")
@@ -62,21 +64,21 @@
 //!
 //! // Setup the builder for `x5chain`
 //! let x5chain_builder = bhx5chain::Builder::new(
-//!     intermediary_private_key.as_bytes(),
-//!     intermediary_certificate.as_bytes(),
-//!     trusted_root_certificate.as_bytes(),
+//!     &intermediary_private_key,
+//!     &intermediary_certificate,
+//!     &trusted_root_certificate,
 //! )
 //! .expect("create x5chain builder");
 //!
-//! let issuer_private_key =
-//!     std::fs::read_to_string("path-to-issuer-private-key.pem").expect("read issuer private key");
+//! let leaf_public_key =
+//!     std::fs::read_to_string("path-to-leaf-public-key.pem").expect("read leaf public key");
 //!
-//! // Optionally set the Issuer Identifier.
-//! let iss = iref::UriBuf::new("https://example.com/issuer".into()).unwrap();
+//! // Optionally set the VC Issuer Identifier.
+//! let iss = iref::UriBuf::new("https://example.com/leaf".into()).unwrap();
 //!
 //! // Complete the `x5chain`
 //! let x5chain = x5chain_builder
-//!     .generate_x5chain(issuer_private_key.as_bytes(), Some(&iss))
+//!     .generate_x5chain(&leaf_public_key, Some(&iss))
 //!     .expect("generate x5chain");
 //! ```
 //!
