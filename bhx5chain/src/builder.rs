@@ -21,7 +21,7 @@ use openssl::{
     asn1::{Asn1Integer, Asn1Time},
     bn::BigNum,
     hash::MessageDigest,
-    pkey::{PKey, Private},
+    pkey::{PKey, Private, Public},
     x509::{
         extension::{
             AuthorityKeyIdentifier, BasicConstraints, KeyUsage,
@@ -35,6 +35,7 @@ use rand::RngCore;
 use crate::{Error, Result, X509Trust, X5Chain};
 
 type PrivateKey = PKey<Private>;
+type PublicKey = PKey<Public>;
 
 #[derive(Debug)]
 struct CertificatePrivateKeyPair {
@@ -61,8 +62,8 @@ const MAXIMUM_SERIAL_NUMBER_HEX: &str = "7ffffffffffffffffffffffffffffffffffffff
 const VALIDITY_PERIOD_IN_DAYS: u32 = 365 * 10;
 
 impl CertificatePrivateKeyPair {
-    fn from_private_key_and_cert(private_key: &[u8], cert: &str) -> Result<Self> {
-        let private_key = PrivateKey::private_key_from_pem(private_key)
+    fn from_private_key_and_cert(private_key: &str, cert: &str) -> Result<Self> {
+        let private_key = PrivateKey::private_key_from_pem(private_key.as_bytes())
             .foreign_err(|| Error::Builder)
             .ctx(|| "couldn't load private key")?;
 
@@ -159,7 +160,7 @@ impl CertificatePrivateKeyPair {
     /// Low-level private method for creation of certificates.
     fn issue_certificate(
         &self,
-        subject_private_key: &PrivateKey,
+        subject_public_key: &PublicKey,
         subject_name: &X509Name,
         subject_alternative_names: &[SubjectAlternativeName],
     ) -> Result<X509> {
@@ -178,7 +179,7 @@ impl CertificatePrivateKeyPair {
             .ctx(|| "Cannot set serial number")?;
 
         cert_builder
-            .set_pubkey(subject_private_key)
+            .set_pubkey(subject_public_key)
             .foreign_err(|| Error::Builder)
             .ctx(|| "Cannot set public key")?;
         cert_builder
@@ -296,15 +297,22 @@ enum SubjectAlternativeName {
     Uri(UriBuf),
 }
 
-/// Builder of [`X5Chain`].
+/// Builder of [`X5Chain`]; essentially a lightweight intermediary certificate authority.
 ///
 /// This structure is used for building [`X5Chain`] based on loaded cryptographic material of
 /// intermediary and trusted root.
 ///
-/// The primary use case of having a [`Builder`] is when there's a demand for creating private keys
-/// & Issuer certificates in runtime based on some initial certificate & private key.  This
-/// structure thus stores these intermediaries in memory and provides the
-/// [`Builder::generate_x5chain`] method for creating `x5chains` based on them.
+/// # Use case
+///
+/// The purpose of this builder is being able to programatically generate a leaf
+/// certificate with a non-trivial certificate chain, without having to shell
+/// out to e.g. the `openssl` tool.
+///
+/// The primary use cases are tests or demo software - this is not a
+/// production-grade CA implementation.
+///
+/// Customization of the leaf certificate is mostly unsupported, as there are
+/// far better tools for that.
 #[derive(Debug)]
 pub struct Builder {
     intermediary_key_pair: CertificatePrivateKeyPair,
@@ -314,16 +322,16 @@ pub struct Builder {
 impl Builder {
     /// Constructor of [`Builder`] expecting all input data to be in PEM format.
     pub fn new(
-        intermediary_private_key: &[u8],
-        intermediary_certificate: &[u8],
-        trusted_root_certificate: &[u8],
+        intermediary_private_key: &str,
+        intermediary_certificate: &str,
+        trusted_root_certificate: &str,
     ) -> Result<Self> {
-        let trusted_root_certificate = X509::from_pem(trusted_root_certificate)
+        let trusted_root_certificate = X509::from_pem(trusted_root_certificate.as_bytes())
             .foreign_err(|| Error::Builder)
             .ctx(|| "invalid trusted root certificate")?;
 
         let verify_relationship = trusted_root_certificate.issued(
-            X509::from_pem(intermediary_certificate)
+            X509::from_pem(intermediary_certificate.as_bytes())
                 .foreign_err(|| Error::Builder)?
                 .as_ref(),
         );
@@ -333,7 +341,7 @@ impl Builder {
                 .ctx(|| "intermediary certificate must be issued by trusted root");
         }
 
-        let intermediary_certificate = std::str::from_utf8(intermediary_certificate)
+        let intermediary_certificate = std::str::from_utf8(intermediary_certificate.as_bytes())
             .foreign_err(|| Error::Builder)
             .ctx(|| "couldn't parse intermediary private key")?;
 
@@ -349,19 +357,20 @@ impl Builder {
         })
     }
 
-    /// Create [`X5Chain`] based on stored certificates & private key, using the given Issuer's
-    /// private key.
+    /// Create [`X5Chain`] based on stored certificates & CA private key, using
+    /// the given leaf public key in PEM format.
+    ///
+    /// The leaf certificate will have extensions suitable for general-purpose
+    /// signing.
+    ///
+    /// # Verifiable Credential (VC) Issuer leaf certificate extensions
     ///
     /// If the optional Issuer Identifier `iss` is not [`None`], it will be used as a Subject
     /// Alternative Name for the Issuer certificate created by this method.
-    pub fn generate_x5chain(
-        &self,
-        issuer_private_key: &[u8],
-        iss: Option<&UriBuf>,
-    ) -> Result<X5Chain> {
-        let issuer_private_key = PrivateKey::private_key_from_pem(issuer_private_key)
+    pub fn generate_x5chain(&self, leaf_public_key: &str, iss: Option<&UriBuf>) -> Result<X5Chain> {
+        let leaf_public_key = PublicKey::public_key_from_pem(leaf_public_key.as_bytes())
             .foreign_err(|| Error::Builder)
-            .ctx(|| "couldn't load Issuer's private key")?;
+            .ctx(|| "couldn't load leaf public key")?;
 
         let mut subject_name = X509NameBuilder::new()
             .foreign_err(|| Error::Builder)
@@ -376,18 +385,18 @@ impl Builder {
             .into_iter()
             .collect::<Vec<_>>();
 
-        let issuer_certificate = self
+        let leaf_certificate = self
             .intermediary_key_pair
             .issue_certificate(
-                &issuer_private_key,
+                &leaf_public_key,
                 &subject_name.build(),
                 &subject_alternative_names,
             )
-            .ctx(|| "couldn't issue Issuer's certificate")?;
+            .ctx(|| "couldn't issue leaf certificate")?;
 
         let intermediary_certificate = self.intermediary_key_pair.cert.clone();
 
-        let chain = X5Chain::new(vec![issuer_certificate, intermediary_certificate])?;
+        let chain = X5Chain::new(vec![leaf_certificate, intermediary_certificate])?;
 
         let trust = X509Trust::new(vec![self.trusted_root_certificate.clone()]);
         chain.verify_against_trusted_roots(&trust)?;
@@ -445,12 +454,7 @@ WEAa6VtMpmEa6fTbAiB5N96N2rCIb4giGO86YQBPoWSRA6Qj/babKniAYsJLqQ==
 -----END CERTIFICATE-----
 ";
 
-        Self::new(
-            private_key.as_bytes(),
-            certificate.as_bytes(),
-            trusted_root_certificate.as_bytes(),
-        )
-        .unwrap()
+        Self::new(private_key, certificate, trusted_root_certificate).unwrap()
     }
 }
 
@@ -462,16 +466,15 @@ mod tests {
 
     #[test]
     fn dummy_generates_valid_x5chain() {
-        let private_key = "-----BEGIN EC PRIVATE KEY-----
-MHcCAQEEIGzJom3RH2Hw78vEu9C9qBveDlChNyLWxXgTSdoKxEpOoAoGCCqGSM49
-AwEHoUQDQgAEFIG72O1w04AJgPP/7D8j2oJsOlFDlbTn6vhkz27afs3GyXfRCsda
-MirozmhYm94VB4IdwyVYtSVz6rce4Ut+hg==
------END EC PRIVATE KEY-----";
+        let public_key = "-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEFIG72O1w04AJgPP/7D8j2oJsOlFD
+lbTn6vhkz27afs3GyXfRCsdaMirozmhYm94VB4IdwyVYtSVz6rce4Ut+hg==
+-----END PUBLIC KEY-----";
 
         let iss = UriBuf::new("https://example.com/issuer".into()).unwrap();
 
         assert!(Builder::dummy()
-            .generate_x5chain(private_key.as_bytes(), Some(&iss))
+            .generate_x5chain(public_key, Some(&iss))
             .is_ok());
     }
 }
