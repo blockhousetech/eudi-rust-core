@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-09-10
+
 ### Changed
 
 - The `Builder` API is refactored and its documentation updated.
@@ -46,7 +48,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - Initial version of the `bhx5chain` crate.
 
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhx5chain/v0.2.1...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhx5chain/v0.3.0...HEAD>
+[0.3.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.3.0>
 [0.2.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.2.1>
 [0.2.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.2.0>
 [0.1.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.1.0>
