@@ -142,11 +142,7 @@ mod tests {
     fn signer_with_chain_construction() {
         let correct_key = Es256Signer::generate("correct".into()).unwrap();
         let certificate_chain = bhx5chain::Builder::dummy()
-            .generate_x5chain(
-                // Only really should need a public key, but the API demands it...
-                &correct_key.private_key.private_key_to_pem().unwrap(),
-                None,
-            )
+            .generate_x5chain(&correct_key.public_key_pem().unwrap(), None)
             .unwrap();
 
         let _signer = SignerWithChain::new(correct_key, certificate_chain.clone()).unwrap();

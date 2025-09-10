@@ -17,10 +17,9 @@ use std::result::Result as StdResult;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use bherror::{
-    traits::{ErrorContext, ForeignError, PropagateError as _},
+    traits::{ErrorContext, ForeignError},
     Error, Result,
 };
-use iref::UriBuf;
 use openssl::{
     bn::{BigNum, BigNumContext},
     ec::{EcGroup, EcGroupRef, EcKey, EcPointRef},
@@ -116,11 +115,21 @@ impl Es256Signer {
     }
 
     /// Create a `ES256` signer from private key in the PEM format.
-    pub fn from_private_key_pem(kid: String, private_key_pem: &[u8]) -> Result<Self, CryptoError> {
-        let private_key = EcPrivate::private_key_from_pem(private_key_pem)
+    pub fn from_private_key_pem(kid: String, private_key_pem: &str) -> Result<Self, CryptoError> {
+        let private_key = EcPrivate::private_key_from_pem(private_key_pem.as_bytes())
             .foreign_err(|| CryptoError::CryptoBackend)?;
 
         Ok(Self { private_key, kid })
+    }
+
+    /// Return the corresponding public key in PEM format.
+    pub fn public_key_pem(&self) -> Result<String, CryptoError> {
+        let public_key_pem = self
+            .private_key
+            .public_key_to_pem()
+            .foreign_err(|| CryptoError::CryptoBackend)?;
+
+        Ok(String::from_utf8(public_key_pem).expect("PEM should be valid UTF-8"))
     }
 
     /// Construct a JWK JSON object for the public counterpart of this key. It
@@ -173,51 +182,6 @@ pub fn ec_public_affine_coords_to_jwk(
     }
 
     jwk
-}
-
-impl Es256SignerWithChain {
-    /// Generate a fresh `ES256` key with the given `kid` field when presented
-    /// as a JWK.
-    #[deprecated(note = "use `SignerWithChain::new` instead")]
-    pub fn generate(
-        kid: String,
-        iss: Option<&UriBuf>,
-        builder: &bhx5chain::Builder,
-    ) -> Result<Self, CryptoError> {
-        let signer = Es256Signer::generate(kid)?;
-
-        let private_key = signer
-            .private_key
-            .private_key_to_pem()
-            .foreign_err(|| CryptoError::CryptoBackend)?;
-
-        let x5chain = builder
-            .generate_x5chain(&private_key, iss)
-            .foreign_err(|| CryptoError::InvalidX5Chain)?;
-
-        Ok(Self { signer, x5chain })
-    }
-
-    /// Create a `ES256` signer from private key in PEM format and
-    /// [`bhx5chain::Builder`].
-    ///
-    /// The `builder` will create valid [`bhx5chain::X5Chain`] with leaf
-    /// certificate associated to key from `private_key_pem`.
-    #[deprecated(note = "use `SignerWithChain::new` instead")]
-    pub fn from_private_key(
-        kid: String,
-        iss: Option<&UriBuf>,
-        private_key_pem: &[u8],
-        builder: &bhx5chain::Builder,
-    ) -> Result<Self, CryptoError> {
-        let signer = Es256Signer::from_private_key_pem(kid, private_key_pem)?;
-
-        let x5chain = builder
-            .generate_x5chain(private_key_pem, iss)
-            .with_err(|| CryptoError::InvalidX5Chain)?;
-
-        Ok(Self { signer, x5chain })
-    }
 }
 
 impl Signer for Es256Signer {

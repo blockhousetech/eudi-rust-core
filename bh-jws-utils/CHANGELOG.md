@@ -8,6 +8,21 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added the `Es256Signer::public_key_pem` method.
+
+### Changed
+
+- The `bhx5chain` dependency is bumped to version `0.3` (from `0.2`).
+- `Es256Signer::from_private_key_pem` now takes PEM as more idiomatically as
+  `&str` rather than `&[u8]`.
+
+### Removed
+
+- Removed deprecated `Es256SignerWithChain` constructors.
+- Removed direct dependency on crate `iref`.
+
 ## [0.4.0] - 2025-09-03
 
 ### Added
