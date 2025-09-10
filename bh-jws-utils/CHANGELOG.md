@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-09-11
+
 ### Added
 
 - Added the `Es256Signer::public_key_pem` method.
@@ -73,7 +75,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - Initial version of the `bh-jws-utils` crate.
 
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.4.0...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.5.0...HEAD>
+[0.5.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.5.0>
 [0.4.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.4.0>
 [0.3.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.3.0>
 [0.2.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.2.0>
