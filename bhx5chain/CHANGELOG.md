@@ -8,6 +8,15 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The `Builder` API is refactored and its documentation updated.
+  - Correctly takes the leaf _public_ key when issuing a certificate; previously
+    it had mistakenly required the _private_ key, which was an impractically
+    strong requirement.
+  - Takes `&str` for PEM-encoded strings, rather than `&[u8]`.
+  - The overall purpose and limitations of the API are clarified in the rustdoc.
+
 ## [0.2.1] - 2025-09-03
 
 ### Added
