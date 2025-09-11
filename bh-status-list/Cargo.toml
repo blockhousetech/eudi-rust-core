@@ -1,6 +1,6 @@
 [package]
 name = "bh-status-list"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["TBTL Tech <tech@tbtl.com>"]
 categories = ["authentication", "cryptography", "encoding"]
 description = "TBTL's library for IETF Token Status List specification."
@@ -12,7 +12,7 @@ repository = "https://github.com/blockhousetech/eudi-rust-core"
 
 [dependencies]
 base64 = "0.22"
-bh-jws-utils = "0.3"
+bh-jws-utils = "0.5"
 bherror = "0.1"
 flate2 = "1.0"
 iref = { version = "3.2", features = ["serde"] }
