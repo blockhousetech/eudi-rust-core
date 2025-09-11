@@ -138,8 +138,11 @@ fn generate_key_pair_with_chain(
     name: &str,
     iss: Option<&UriBuf>,
 ) -> (Es256SignerWithChain, JwkPublic) {
-    let signer =
-        Es256SignerWithChain::generate(kid.to_owned(), iss, &bhx5chain::Builder::dummy()).unwrap();
+    let signer = Es256Signer::generate(kid.to_owned()).unwrap();
+    let cert_chain = bhx5chain::Builder::dummy()
+        .generate_x5chain(&signer.public_key_pem().unwrap(), iss)
+        .unwrap();
+    let signer = Es256SignerWithChain::new(signer, cert_chain).unwrap();
     let public_jwk = signer.public_jwk().unwrap();
     println!(
         "{} public key:\n{}\n",
