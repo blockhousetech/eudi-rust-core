@@ -1,6 +1,6 @@
 [package]
 name = "bhmdoc"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["TBTL Tech <tech@tbtl.com>"]
 categories = ["authentication", "cryptography", "encoding"]
 description = "TBTL's library for handling mDL/mdoc specification."
@@ -12,9 +12,9 @@ repository = "https://github.com/blockhousetech/eudi-rust-core"
 
 [dependencies]
 base64 = "0.21"
-bh-jws-utils = "0.3"
+bh-jws-utils = "0.5"
 bherror = "0.1"
-bhx5chain = "0.2"
+bhx5chain = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 ciborium = "0.2"
 coset = "0.3"

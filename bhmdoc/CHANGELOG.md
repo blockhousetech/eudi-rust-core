@@ -8,6 +8,13 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-09-11
+
+### Changed
+
+- The `bh-jws-utils` dependency is bumped to version `0.5` (from `0.3`).
+- The `bhx5chain` dependency is bumped to version `0.3` (from `0.2`).
+
 ## [0.2.1] - 2025-09-08
 
 ### Added
@@ -35,7 +42,8 @@ the Issuer.
 - README.md describing the crate.
 - Initial version of the `bhmdoc` crate.
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhmdoc/v0.2.1...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhmdoc/v0.3.0...HEAD>
+[0.3.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.3.0>
 [0.2.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.2.1>
 [0.2.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.2.0>
 [0.1.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.1.0>
