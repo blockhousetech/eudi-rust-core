@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use bh_jws_utils::{Es256Signer, Es256SignerWithChain, Es256Verifier, SigningAlgorithm};
+use bh_jws_utils::{Es256Signer, Es256Verifier, SignerWithChain, SigningAlgorithm};
 use bh_sd_jwt::{
     holder::Holder,
     issuer::Issuer,
@@ -69,12 +69,11 @@ async fn main() {
     let iss = UriBuf::new("https://example.com/issuer".into()).unwrap();
 
     // used to sign the issued credential
-    let issuer_signer = Es256SignerWithChain::generate(
-        "issuer_kid".to_owned(),
-        Some(&iss),
-        &bhx5chain::Builder::dummy(),
-    )
-    .unwrap();
+    let issuer_signer = Es256Signer::generate("issuer_kid".to_owned()).unwrap();
+    let cert_chain = bhx5chain::Builder::dummy()
+        .generate_x5chain(&issuer_signer.public_key_pem().unwrap(), Some(&iss))
+        .unwrap();
+    let issuer_signer = SignerWithChain::new(issuer_signer, cert_chain).unwrap();
 
     // used by holder to create a cryptographic key binding
     let holder_signer = Es256Signer::generate("holder_kid".to_owned()).unwrap();
