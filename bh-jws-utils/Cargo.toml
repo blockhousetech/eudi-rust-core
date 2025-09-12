@@ -1,6 +1,6 @@
 [package]
 name = "bh-jws-utils"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["TBTL Tech <tech@tbtl.com>"]
 categories = ["cryptography"]
 description = "TBTL's library for handling JSON Web Signatures (JWS)."
