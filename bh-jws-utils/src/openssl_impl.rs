@@ -212,12 +212,6 @@ impl HasJwkKid for Es256Signer {
     }
 }
 
-impl HasJwkKid for Es256SignerWithChain {
-    fn jwk_kid(&self) -> &str {
-        &self.signer.kid
-    }
-}
-
 /// [`SignatureVerifier`] implementation supporting the `ES256` algorithm (ECDSA
 /// using the P-256 curve and the SHA-256 hash function).
 #[derive(Default)]

@@ -17,8 +17,8 @@ use bherror::traits::{ForeignBoxed as _, ForeignError, PropagateError};
 use bhx5chain::X5Chain;
 
 use crate::{
-    openssl_impl::public_key_from_jwk_es256, BoxError, CryptoError, HasX5Chain, JwkPublic, Signer,
-    SigningAlgorithm,
+    openssl_impl::public_key_from_jwk_es256, BoxError, CryptoError, HasJwkKid, HasX5Chain,
+    JwkPublic, Signer, SigningAlgorithm,
 };
 
 /// [`Signer`] decorator with an X.509 certificate chain associated with
@@ -129,6 +129,12 @@ impl<S: Signer> Signer for SignerWithChain<S> {
 impl<S: Signer> HasX5Chain for SignerWithChain<S> {
     fn x5chain(&self) -> X5Chain {
         self.x5chain.clone()
+    }
+}
+
+impl<S: HasJwkKid> HasJwkKid for SignerWithChain<S> {
+    fn jwk_kid(&self) -> &str {
+        self.signer.jwk_kid()
     }
 }
 
