@@ -8,6 +8,11 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added a blanket impl of `HasJwkKid` for `SignerWithChain` that forwards to the
+  inner signer.
+
 ## [0.5.0] - 2025-09-11
 
 ### Added
