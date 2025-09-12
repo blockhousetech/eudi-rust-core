@@ -10,9 +10,7 @@ The primary way to use this library is via the `JwtSigner` and `JwtVerifier`
 traits, which provide functionality for signing JWTs and verifying signed JWTs.
 A default `openssl` backed implementation of these traits is available by using
 the `openssl_impl::Es256Signer` and `openssl:impl:Es256Verifier` structs which
-implement `JwtSigner` and `JwtVerifier` respectively. This implementation is
-available under the default feature `openssl` which can be disabled and replaced
-by a custom implementation.
+implement `JwtSigner` and `JwtVerifier` respectively.
 
 For additional documentation & examples, take a look at the [crate
 documentation](https://docs.rs/bh-jws-utils).

@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.5.1] - 2025-09-12
+
 ### Added
 
 - Added a blanket impl of `HasJwkKid` for `SignerWithChain` that forwards to the
@@ -80,7 +82,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - Initial version of the `bh-jws-utils` crate.
 
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.5.0...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.5.1...HEAD>
+[0.5.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.5.1>
 [0.5.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.5.0>
 [0.4.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.4.0>
 [0.3.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.3.0>
