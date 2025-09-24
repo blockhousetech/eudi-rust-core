@@ -24,7 +24,10 @@ use rand::thread_rng;
 
 use crate::{
     models::{
-        data_retrieval::{device_retrieval::response::Document, Claims},
+        data_retrieval::{
+            device_retrieval::{issuer_auth::ValidityInfo, response::Document},
+            Claims,
+        },
         issue::IssuedDocument,
         mdl::{MDL_DOCUMENT_TYPE, MDL_NAMESPACE},
         DeviceRequest, DeviceResponse, DocRequest,
@@ -141,7 +144,7 @@ pub(crate) fn issue_dummy_mdoc(current_time: u64) -> IssuedDocument {
             device_key,
             &issuer_signer,
             &mut rng,
-            current_time,
+            validity_info(current_time),
         )
         .unwrap()
 }
@@ -205,4 +208,14 @@ pub(crate) fn remove_original_data_from_documents(documents: &mut [Document]) {
     documents
         .iter_mut()
         .for_each(|document| document.device_signed.name_spaces.0.original_data = None);
+}
+
+pub(crate) fn validity_info(current_time: u64) -> ValidityInfo {
+    ValidityInfo::new(
+        current_time.try_into().unwrap(),
+        current_time.try_into().unwrap(),
+        (current_time + 365 * 24 * 60 * 60).try_into().unwrap(), // in 1 year
+        None,
+    )
+    .unwrap()
 }

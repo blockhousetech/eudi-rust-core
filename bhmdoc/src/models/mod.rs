@@ -34,7 +34,7 @@ pub mod mdl;
 use std::str::FromStr;
 
 use bherror::traits::{ErrorContext as _, ForeignError as _};
-use chrono::Utc;
+use chrono::{Timelike as _, Utc};
 use ciborium::{from_reader, into_writer, value::Value};
 pub use data_retrieval::{
     common::NameSpace,
@@ -217,16 +217,33 @@ where
 
 /// A `tdate` _CBOR_ type, as defined in the section `7.2.1` of the [ISO/IEC 18013-5:2021][1].
 ///
+/// The following requirements apply to the representation of [`DateTime`]:
+/// - fraction of seconds is not used;
+/// - no local offset from UTC is used, as indicated by setting the `time-offset` defined in
+///   [RFC 3339][2] to `"Z"`.
+///
 /// [1]: <https://www.iso.org/standard/69084.html>
+/// [2]: <https://datatracker.ietf.org/doc/html/rfc3339>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(into = "Value", try_from = "Value")]
-pub struct DateTime(pub chrono::DateTime<Utc>);
+pub struct DateTime(chrono::DateTime<Utc>);
 
 impl FromStr for DateTime {
-    type Err = chrono::ParseError;
+    type Err = bherror::Error<MdocError>;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Ok(Self(value.parse()?))
+        let date_time = chrono::DateTime::parse_from_rfc3339(value)
+            .foreign_err(|| MdocError::InvalidDateTime)
+            .ctx(|| format!("{value} not a valid Date Time string"))?;
+
+        if date_time.offset().utc_minus_local() != 0 {
+            return Err(bherror::Error::root(MdocError::InvalidDateTime)
+                .ctx("Date Time is not in UTC (offset must be Z)"));
+        }
+
+        let date_time = date_time.with_timezone(&Utc);
+
+        DateTime::try_from(date_time)
     }
 }
 
@@ -236,14 +253,15 @@ impl TryFrom<u64> for DateTime {
     fn try_from(value: u64) -> Result<Self, Self::Error> {
         let value_i64 = value
             .try_into()
-            .foreign_err(|| MdocError::InvalidTime(value))
-            .ctx(|| "seconds do not fit into i64")?;
+            .foreign_err(|| MdocError::InvalidDateTime)
+            .ctx(|| format!("{value} seconds do not fit into i64"))?;
 
-        Ok(Self(
-            chrono::DateTime::from_timestamp(value_i64, 0).ok_or_else(|| {
-                bherror::Error::root(MdocError::InvalidTime(value)).ctx("seconds out of range")
-            })?,
-        ))
+        let date_time = chrono::DateTime::from_timestamp(value_i64, 0).ok_or_else(|| {
+            bherror::Error::root(MdocError::InvalidDateTime)
+                .ctx(format!("{value} seconds out of range"))
+        })?;
+
+        DateTime::try_from(date_time)
     }
 }
 
@@ -258,33 +276,45 @@ impl From<DateTime> for Value {
 }
 
 impl TryFrom<Value> for DateTime {
-    type Error = String;
+    type Error = bherror::Error<MdocError>;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Tag(MDOC_TDATE_CBOR_TAG, value) => value
-                .as_text()
-                .ok_or_else(|| "`tdate` MUST be `String`".to_owned())?
-                .parse::<DateTime>()
-                .map_err(|err| err.to_string()),
+        let value = match &value {
+            Value::Tag(MDOC_TDATE_CBOR_TAG, value) => value.as_text().ok_or_else(|| {
+                bherror::Error::root(MdocError::InvalidDateTime).ctx("`tdate` MUST be `String`")
+            })?,
             // HACK(third-party): A certain `third-party` implementation does not tag the `tdate`
             // value in their credentials, so we accept this as a valid `tdate` even though it is
             // not tagged according to the spec.
             //
             // TODO(issues/28): Create a GitHub issue when open-sourcing which tracks that this
             // hack can and should be removed.
-            Value::Text(value) => value.parse::<DateTime>().map_err(|err| err.to_string()),
-            _ => Err(format!(
-                "`tdate` MUST be tagged with `{}` or be a plain `Text` value",
-                MDOC_TDATE_CBOR_TAG
-            )),
-        }
+            Value::Text(value) => value,
+            _ => {
+                return Err(
+                    bherror::Error::root(MdocError::InvalidDateTime).ctx(format!(
+                        "`tdate` MUST be tagged with `{}` or be a plain `Text` value",
+                        MDOC_TDATE_CBOR_TAG
+                    )),
+                )
+            }
+        };
+
+        value.parse::<DateTime>()
     }
 }
 
-impl From<chrono::DateTime<Utc>> for DateTime {
-    fn from(value: chrono::DateTime<Utc>) -> Self {
-        Self(value)
+impl TryFrom<chrono::DateTime<Utc>> for DateTime {
+    type Error = bherror::Error<MdocError>;
+
+    fn try_from(value: chrono::DateTime<Utc>) -> Result<Self, Self::Error> {
+        // ISO/IEC 18013-5:2021: "fraction of seconds shall not be used"
+        if value.nanosecond() != 0 {
+            return Err(bherror::Error::root(MdocError::InvalidDateTime)
+                .ctx("Date Time should not use fraction of seconds"));
+        }
+
+        Ok(Self(value))
     }
 }
 
@@ -336,6 +366,7 @@ impl TryFrom<Value> for FullDate {
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
     use ciborium::{from_reader, into_writer};
 
     use super::*;
@@ -393,7 +424,7 @@ mod tests {
     }
 
     #[test]
-    fn test_datetime() {
+    fn test_datetime_success() {
         const EXPECTED_CBOR: &str = "c074323032302d31302d30315431333a33303a30325a";
 
         let date_time: DateTime = "2020-10-01T13:30:02Z".parse().unwrap();
@@ -408,6 +439,58 @@ mod tests {
         let decoded: DateTime = from_reader(encoded.as_slice()).unwrap();
 
         assert_eq!(date_time, decoded);
+    }
+
+    #[test]
+    fn test_datetime_sub_secs_fails() {
+        // 50 seconds success
+        let dt = "1985-04-12T23:20:50Z";
+
+        let _date_time: DateTime = dt.parse().unwrap();
+
+        let _date_time: DateTime =
+            Value::Tag(MDOC_TDATE_CBOR_TAG, Box::new(Value::Text(dt.to_owned())))
+                .try_into()
+                .unwrap();
+
+        // 50.52 seconds should fail
+        let dt = "1985-04-12T23:20:50.52Z";
+
+        let err = dt.parse::<DateTime>().unwrap_err();
+        assert_matches!(err.error, MdocError::InvalidDateTime);
+
+        let err = DateTime::try_from(Value::Tag(
+            MDOC_TDATE_CBOR_TAG,
+            Box::new(Value::Text(dt.to_owned())),
+        ))
+        .unwrap_err();
+        assert_matches!(err.error, MdocError::InvalidDateTime);
+    }
+
+    #[test]
+    fn test_datetime_non_utc_fails() {
+        // UTC (Z) success
+        let dt = "1996-12-19T16:39:57Z";
+
+        let _date_time: DateTime = dt.parse().unwrap();
+
+        let _date_time: DateTime =
+            Value::Tag(MDOC_TDATE_CBOR_TAG, Box::new(Value::Text(dt.to_owned())))
+                .try_into()
+                .unwrap();
+
+        // -08:00 from UTC (Pacific Standard Time) should fail
+        let dt = "1996-12-19T16:39:57-08:00";
+
+        let err = dt.parse::<DateTime>().unwrap_err();
+        assert_matches!(err.error, MdocError::InvalidDateTime);
+
+        let err = DateTime::try_from(Value::Tag(
+            MDOC_TDATE_CBOR_TAG,
+            Box::new(Value::Text(dt.to_owned())),
+        ))
+        .unwrap_err();
+        assert_matches!(err.error, MdocError::InvalidDateTime);
     }
 
     // HACK(third-party): A certain `third-party` implementation does not tag the `tdate` value in

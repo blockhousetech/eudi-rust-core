@@ -108,7 +108,7 @@ pub struct DeviceSignature(
         serialize_with = "serialize_coset",
         deserialize_with = "deserialize_coset"
     )]
-    CoseSign1,
+    pub(crate) CoseSign1,
 );
 
 impl From<CoseSign1> for DeviceSignature {
@@ -196,7 +196,7 @@ pub struct DeviceMac(
         serialize_with = "serialize_coset",
         deserialize_with = "deserialize_coset"
     )]
-    CoseMac0,
+    pub(crate) CoseMac0,
 );
 
 /// [`DeviceAuthenticationBytes`] as defined in the section `9.1.3.4` of the [ISO/IEC
