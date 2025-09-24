@@ -8,6 +8,18 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- The associated function `new` for the `ValidityInfo`.
+
+### Changed
+
+- The `DateTime` no longer allows the use of sub-second precision and
+  non-UTC time zones.
+- The `ValidityInfo` can no longer be created nor deserialized with
+  `validFrom` set to before `signed`, and `validUntil` set to before
+  `validFrom`.
+
 ## [0.3.0] - 2025-09-11
 
 ### Changed
