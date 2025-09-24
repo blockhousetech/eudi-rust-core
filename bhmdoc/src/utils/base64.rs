@@ -29,6 +29,8 @@ pub fn base64_url_decode<T: AsRef<[u8]>>(payload: T) -> Result<Vec<u8>, base64::
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
+
     use super::*;
 
     const TEST_CASES: [(&str, &str); 4] = [
@@ -74,13 +76,13 @@ mod tests {
     fn test_base64_url_decode_padded_input() {
         let input = "SGVsbG8sIFdvcmxkIQ==";
         let err = base64_url_decode(input).unwrap_err();
-        assert!(matches!(err, base64::DecodeError::InvalidPadding));
+        assert_matches!(err, base64::DecodeError::InvalidPadding);
     }
 
     #[test]
     fn test_base64_url_decode_invalid_input() {
         let input = "inv@lid";
         let err = base64_url_decode(input).unwrap_err();
-        assert!(matches!(err, base64::DecodeError::InvalidByte(3, b'@')));
+        assert_matches!(err, base64::DecodeError::InvalidByte(3, b'@'));
     }
 }

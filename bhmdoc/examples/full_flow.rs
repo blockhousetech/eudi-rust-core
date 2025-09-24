@@ -19,6 +19,7 @@ use bh_jws_utils::{Es256Signer, Es256Verifier, SignerWithChain};
 use bhmdoc::{
     generate_nonce,
     models::{
+        data_retrieval::device_retrieval::issuer_auth::ValidityInfo,
         mdl::{MDLMandatory, MDL},
         DeviceRequest, DocRequest, FullDate,
     },
@@ -100,7 +101,14 @@ fn main() {
             device_key,
             &issuer_signer,
             &mut rand::thread_rng(),
-            current_time,
+            ValidityInfo::new(
+                current_time.try_into().unwrap(),
+                current_time.try_into().unwrap(),
+                // set expiration to 1 year
+                (current_time + 365 * 24 * 60 * 60).try_into().unwrap(),
+                None,
+            )
+            .unwrap(),
         )
         .unwrap();
 

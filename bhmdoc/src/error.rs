@@ -97,13 +97,17 @@ pub enum MdocError {
     /// Error when we fail to parse an issued `mDoc` Credential.
     #[strum(to_string = "Unable to parse issued credential")]
     IssuerSignedParse,
-    /// Error when we try to construct [`DateTime`][crate::models::DateTime] from an invalid
-    /// timestamp.
-    #[strum(to_string = "{0} seconds overflows time")]
-    InvalidTime(u64),
+    /// Error when we try to construct [`DateTime`][crate::models::DateTime] from an invalid value.
+    #[strum(to_string = "Invalid value for Date Time")]
+    InvalidDateTime,
     /// The provided Device [`Signer`][bh_jws_utils::Signer] is invalid.
     #[strum(to_string = "Invalid Device Signer: {0}")]
     InvalidDeviceSigner(String),
+    /// Invalid
+    /// [`ValidityInfo`][crate::models::data_retrieval::device_retrieval::issuer_auth::ValidityInfo]
+    /// data.
+    #[strum(to_string = "Validity Info is invalid")]
+    InvalidValidityInfo,
 }
 
 impl bherror::BhError for MdocError {}

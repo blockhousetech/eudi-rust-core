@@ -24,7 +24,11 @@ use rand::Rng;
 
 use crate::{
     models::{
-        data_retrieval::{common::DocType, device_retrieval::response::IssuerSigned, Claims},
+        data_retrieval::{
+            common::DocType,
+            device_retrieval::{issuer_auth::ValidityInfo, response::IssuerSigned},
+            Claims,
+        },
         issue::IssuedDocument,
         mdl::{MDL, MDL_DOCUMENT_TYPE, MDL_NAMESPACE},
     },
@@ -53,7 +57,7 @@ impl Issuer {
         device_key: DeviceKey,
         signer: &Signer,
         rng: &mut R,
-        current_time: u64,
+        validity_info: ValidityInfo,
     ) -> Result<IssuedDocument> {
         let issuer_signed = IssuerSigned::new(
             doc_type.clone(),
@@ -61,7 +65,7 @@ impl Issuer {
             device_key,
             signer,
             rng,
-            current_time,
+            validity_info,
         )?;
 
         Ok(IssuedDocument::new(doc_type, issuer_signed))
@@ -74,7 +78,7 @@ impl Issuer {
         device_key: DeviceKey,
         signer: &Signer,
         rng: &mut R,
-        current_time: u64,
+        validity_info: ValidityInfo,
     ) -> Result<IssuedDocument> {
         let mut name_spaces = HashMap::new();
         name_spaces.insert(MDL_NAMESPACE.into(), mdl.into());
@@ -85,7 +89,7 @@ impl Issuer {
             device_key,
             signer,
             rng,
-            current_time,
+            validity_info,
         )
     }
 }
@@ -98,10 +102,13 @@ mod tests {
     use rand::thread_rng;
 
     use super::*;
-    use crate::models::{
-        data_retrieval::common::{DataElementIdentifier, DataElementValue},
-        mdl::MDLMandatory,
-        FullDate,
+    use crate::{
+        models::{
+            data_retrieval::common::{DataElementIdentifier, DataElementValue},
+            mdl::MDLMandatory,
+            FullDate,
+        },
+        utils::test::validity_info,
     };
 
     #[test]
@@ -125,7 +132,7 @@ mod tests {
                 device_key,
                 &issuer_signer,
                 &mut rng,
-                100,
+                validity_info(100),
             )
             .unwrap();
 
@@ -161,7 +168,13 @@ mod tests {
         let mdl = MDL::new(mdl_mandatory);
 
         let issued = Issuer
-            .issue_mdl(mdl, device_key, &issuer_signer, &mut rng, 100)
+            .issue_mdl(
+                mdl,
+                device_key,
+                &issuer_signer,
+                &mut rng,
+                validity_info(100),
+            )
             .unwrap();
 
         let mut encoded = Vec::new();

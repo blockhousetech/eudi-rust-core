@@ -74,7 +74,7 @@ pub struct IssuerAuth(
         serialize_with = "serialize_coset",
         deserialize_with = "deserialize_coset"
     )]
-    coset::CoseSign1,
+    pub(crate) coset::CoseSign1,
 );
 
 impl IssuerAuth {
@@ -104,7 +104,7 @@ impl IssuerAuth {
         name_spaces: &IssuerNameSpaces,
         device_key: DeviceKey,
         signer: &Signer,
-        current_time: u64,
+        validity_info: ValidityInfo,
     ) -> crate::Result<Self> {
         // For now we are only signing with ES256
         let alg = match signer.algorithm() {
@@ -128,29 +128,17 @@ impl IssuerAuth {
         };
 
         let mso: MobileSecurityObjectBytes =
-            MobileSecurityObject::new(doc_type, name_spaces, device_key, current_time)?.into();
+            MobileSecurityObject::new(doc_type, name_spaces, device_key, validity_info)?.into();
         let mut mso_bytes = vec![];
         ciborium::into_writer(&mso, &mut mso_bytes).foreign_err(|| MdocError::IssuerAuth)?;
 
-        let mut cose_sign1 = coset::CoseSign1Builder::new()
+        let cose_sign1 = coset::CoseSign1Builder::new()
             .protected(protected)
             .unprotected(unprotected)
             .payload(mso_bytes)
             .try_create_signature(&[], |data| signer.sign(data))
             .foreign_boxed_err(|| MdocError::IssuerAuth)?
             .build();
-
-        // This is hack so our test passes. The `original_data` field will only be filled if
-        // CoseSign1 is deserialized from CBOR. However, in test we have following case:
-        //
-        //  - manually create CoseSign1 (`original_data` is empty)
-        //  - serialize CoseSign1
-        //  - deserialize CoseSign1 (now `original_data` isn't empty)
-        //  - compare created and deserialized structs
-        //
-        // This fix will help as we always use same signing algorithm, but we must be aware of this
-        // once we start supporting other.
-        cose_sign1.protected.original_data = Some(vec![161, 1, 38]);
 
         Ok(Self(cose_sign1))
     }
@@ -398,7 +386,7 @@ impl MobileSecurityObject {
         doc_type: DocType,
         IssuerNameSpaces(ref name_spaces): &IssuerNameSpaces,
         device_key: DeviceKey,
-        current_time: u64,
+        validity_info: ValidityInfo,
     ) -> Result<Self> {
         let digest = |item: &IssuerSignedItemBytes| -> Result<(DigestID, Bytes)> {
             Ok((
@@ -420,11 +408,6 @@ impl MobileSecurityObject {
             })
             .collect::<Result<_>>()?;
 
-        let signed = current_time.try_into()?;
-        let valid_from = current_time.try_into()?;
-        // We set validity for one year, but this shall be parameter in near future
-        let valid_until = (current_time + 365 * 24 * 60 * 60).try_into()?;
-
         Ok(MobileSecurityObject {
             version: MOBILE_SECURITY_OBJECT_VERSION.to_owned(),
             digest_algorithm: MSO_DEFAULT_DIGEST_ALG,
@@ -435,12 +418,7 @@ impl MobileSecurityObject {
                 key_info: None,
             },
             doc_type,
-            validity_info: ValidityInfo {
-                signed,
-                valid_from,
-                valid_until,
-                expected_update: None,
-            },
+            validity_info,
         })
     }
 
@@ -668,7 +646,12 @@ pub struct KeyInfo(HashMap<i64, ciborium::Value>);
 ///
 /// [1]: <https://www.iso.org/standard/69084.html>
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(
+    deny_unknown_fields,
+    rename_all = "camelCase",
+    try_from = "ValidityInfoDeserializeHelper"
+)]
+#[non_exhaustive]
 pub struct ValidityInfo {
     /// The timestamp at which the signature was created.
     pub signed: DateTime,
@@ -685,7 +668,74 @@ pub struct ValidityInfo {
     pub expected_update: Option<DateTime>,
 }
 
+/// A helper struct to [`Deserialize`][serde::Deserialize] [`ValidityInfo`] with
+/// custom invariants.
+///
+/// **NEVER** use this `struct` for anything else.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[non_exhaustive]
+struct ValidityInfoDeserializeHelper {
+    signed: DateTime,
+    valid_from: DateTime,
+    valid_until: DateTime,
+    expected_update: Option<DateTime>,
+}
+
+impl TryFrom<ValidityInfoDeserializeHelper> for ValidityInfo {
+    type Error = bherror::Error<MdocError>;
+
+    fn try_from(value: ValidityInfoDeserializeHelper) -> std::result::Result<Self, Self::Error> {
+        Self::new(
+            value.signed,
+            value.valid_from,
+            value.valid_until,
+            value.expected_update,
+        )
+    }
+}
+
 impl ValidityInfo {
+    /// Creates new [`ValidityInfo`], checking the provided data along the way.
+    ///
+    /// The data is validated as per `Section 9.1.2.4` of
+    /// [ISO/IEC 18013-5:2021][1].
+    ///
+    /// - The timestamps in the [`ValidityInfo`] structure shall not use
+    ///   fractions of seconds and shall use a UTC offset of 00:00, as indicated
+    ///   by the character `"Z"`.
+    /// - The timestamp of `valid_from` shall be equal or later than the
+    ///   `signed` element.
+    /// - The value of the `valid_until` timestamp shall be later than the
+    ///   `valid_from` element.
+    ///
+    /// [1]: <https://www.iso.org/standard/69084.html>
+    pub fn new(
+        signed: DateTime,
+        valid_from: DateTime,
+        valid_until: DateTime,
+        expected_update: Option<DateTime>,
+    ) -> Result<Self> {
+        // the timestamp of `valid_from` shall be equal or later than the `signed` element
+        if valid_from.0 < signed.0 {
+            return Err(bherror::Error::root(MdocError::InvalidValidityInfo)
+                .ctx("`valid_from` must be equal or later than `signed`"));
+        }
+
+        // the value of the `valid_until` timestamp shall be later than the `valid_from` element
+        if valid_until.0 <= valid_from.0 {
+            return Err(bherror::Error::root(MdocError::InvalidValidityInfo)
+                .ctx("`valid_until` must be later than `valid_from`"));
+        }
+
+        Ok(Self {
+            signed,
+            valid_from,
+            valid_until,
+            expected_update,
+        })
+    }
+
     /// Validates the expiration and the not-valid-before claim.
     ///
     /// **Note**: this is intended to be used only by the `mDoc` Verifier.
@@ -732,7 +782,7 @@ mod tests {
         models::{
             data_retrieval::device_retrieval::response::IssuerSignedItem, mdl::MDL_NAMESPACE,
         },
-        utils::test::SimpleSigner,
+        utils::test::{validity_info, SimpleSigner},
     };
 
     fn dummy_issuer_auth(current_time: u64) -> IssuerAuth {
@@ -774,7 +824,7 @@ mod tests {
             &name_spaces,
             device_key,
             &issuer_signer,
-            current_time,
+            validity_info(current_time),
         )
         .unwrap()
     }
@@ -992,5 +1042,64 @@ eb0733d667005f7467cec4b87b9381a6ba1ede8e00df29f32a37230f39a842a54821fdd223092819
         // every Issuer is trusted (`trust` not provided)
         let x5chain = issuer_auth.x5chain(None).unwrap();
         assert_eq!(expected_x5chain, x5chain);
+    }
+
+    #[test]
+    fn validity_info_success() {
+        let _validity_info = ValidityInfo::new(
+            100.try_into().unwrap(),
+            200.try_into().unwrap(),
+            300.try_into().unwrap(),
+            None,
+        )
+        .unwrap();
+
+        let _validity_info: ValidityInfo = serde_json::from_value(serde_json::json!({
+            "signed": "2025-08-17T16:39:57Z",
+            "validFrom": "2025-08-17T16:51:02Z",
+            "validUntil": "2025-08-17T18:11:00Z",
+            "expectedUpdate": "2025-08-17T18:10:00Z",
+        }))
+        .unwrap();
+    }
+
+    #[test]
+    fn validity_info_valid_from_before_signed_fails() {
+        let err = ValidityInfo::new(
+            100.try_into().unwrap(),
+            50.try_into().unwrap(), // before `signed`
+            300.try_into().unwrap(),
+            None,
+        )
+        .unwrap_err();
+        assert_matches!(err.error, MdocError::InvalidValidityInfo);
+
+        let err = serde_json::from_value::<ValidityInfo>(serde_json::json!({
+            "signed": "2025-08-17T16:39:57Z",
+            "validFrom": "2025-08-17T07:14:44Z", // before `signed`
+            "validUntil": "2025-08-17T18:11:00Z",
+        }))
+        .unwrap_err();
+        assert!(err.is_data());
+    }
+
+    #[test]
+    fn validity_info_valid_until_before_valid_from_fails() {
+        let err = ValidityInfo::new(
+            100.try_into().unwrap(),
+            200.try_into().unwrap(),
+            150.try_into().unwrap(), // before `valid_from`
+            None,
+        )
+        .unwrap_err();
+        assert_matches!(err.error, MdocError::InvalidValidityInfo);
+
+        let err = serde_json::from_value::<ValidityInfo>(serde_json::json!({
+            "signed": "2025-08-17T16:39:57Z",
+            "validFrom": "2025-08-17T16:51:02Z",
+            "validUntil": "2025-08-17T16:45:25Z", // before `validFrom`
+        }))
+        .unwrap_err();
+        assert!(err.is_data());
     }
 }
