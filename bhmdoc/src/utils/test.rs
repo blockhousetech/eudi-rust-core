@@ -137,16 +137,22 @@ pub(crate) fn issue_dummy_mdoc(current_time: u64) -> IssuedDocument {
         ]),
     )]));
 
-    Issuer
-        .issue(
+    let unsigned = Issuer
+        .issue_unsigned(
             MDL_DOCUMENT_TYPE.into(),
             claims,
             device_key,
-            &issuer_signer,
+            issuer_signer.algorithm(),
+            issuer_signer.x5chain(),
             &mut rng,
             validity_info(current_time),
         )
-        .unwrap()
+        .unwrap();
+
+    let tbs_data = Issuer.tbs_data(&unsigned);
+    let signature = issuer_signer.sign(&tbs_data).unwrap();
+
+    Issuer.issue(unsigned, signature).unwrap()
 }
 
 pub(crate) fn issue_dummy_mdoc_to_device(current_time: u64) -> Device {

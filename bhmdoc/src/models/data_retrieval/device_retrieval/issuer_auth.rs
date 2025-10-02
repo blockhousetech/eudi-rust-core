@@ -1,5 +1,4 @@
 // Copyright (C) 2020-2025  The Blockhouse Technology Limited (TBTL).
-//
 // This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU Affero General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or (at your
@@ -26,6 +25,7 @@
 
 use std::collections::HashMap;
 
+use bh_jws_utils::Es256Verifier;
 use bh_jws_utils::{public_jwk_from_x5chain_leaf, JwkPublic, SignatureVerifier, SigningAlgorithm};
 use bherror::traits::{
     ErrorContext as _, ForeignBoxed as _, ForeignError as _, PropagateError as _,
@@ -61,6 +61,9 @@ const DEFAULT_ISSUER_KID: &str = "issuer_kid";
 /// [`MobileSecurityObject`].
 const MSO_DEFAULT_DIGEST_ALG: DigestAlgorithm = DigestAlgorithm::Sha256;
 
+/// Docs
+pub struct IssuerAuthUnsigned(coset::CoseSign1);
+
 /// [`IssuerAuth`] as defined in the section `9.1.2.4` of the [ISO/IEC 18013-5:2021][1] standard.
 ///
 /// This is just a wrapper around [`coset::CoseSign1`].  More information about `COSE_Sign1`
@@ -77,8 +80,8 @@ pub struct IssuerAuth(
     pub(crate) coset::CoseSign1,
 );
 
-impl IssuerAuth {
-    /// Create a new [`IssuerAuth`].
+impl IssuerAuthUnsigned {
+    /// Create a new [`IssuerAuthUnsigned`].
     ///
     /// The certificate used in `COSE_Sign1` unprotected field is used for verifying
     /// [`IssuerAuth`]'s signature.
@@ -99,15 +102,16 @@ impl IssuerAuth {
     ///  - `device_key`: public key that is bound to the issued credential.
     ///
     /// [1]: <https://www.iso.org/standard/69084.html>
-    pub fn new<Signer: bh_jws_utils::Signer + bh_jws_utils::HasX5Chain>(
+    pub fn new(
         doc_type: DocType,
         name_spaces: &IssuerNameSpaces,
         device_key: DeviceKey,
-        signer: &Signer,
+        alg: SigningAlgorithm,
+        x5chain: X5Chain,
         validity_info: ValidityInfo,
     ) -> crate::Result<Self> {
         // For now we are only signing with ES256
-        let alg = match signer.algorithm() {
+        let alg = match alg {
             SigningAlgorithm::Es256 => coset::iana::Algorithm::ES256,
             _ => {
                 return Err(bherror::Error::root(MdocError::IssuerAuth)
@@ -122,7 +126,7 @@ impl IssuerAuth {
         let unprotected = Header {
             rest: vec![(
                 Label::Int(HeaderParameter::X5Chain.to_i64()),
-                x5chain_to_cbor_value(signer.x5chain())?,
+                x5chain_to_cbor_value(x5chain)?,
             )],
             ..Default::default()
         };
@@ -136,13 +140,29 @@ impl IssuerAuth {
             .protected(protected)
             .unprotected(unprotected)
             .payload(mso_bytes)
-            .try_create_signature(&[], |data| signer.sign(data))
-            .foreign_boxed_err(|| MdocError::IssuerAuth)?
             .build();
 
         Ok(Self(cose_sign1))
     }
 
+    pub(crate) fn tbs_data(&self) -> Vec<u8> {
+        let aad = &[];
+        self.0.tbs_data(aad)
+    }
+
+    pub(crate) fn sign(mut self, signature: Vec<u8>) -> Result<IssuerAuth> {
+        self.0.signature = signature;
+
+        let issuer_auth = IssuerAuth(self.0);
+
+        // For now we only support ES256 signing
+        issuer_auth.verify_signature(None, |_| Some(&Es256Verifier))?;
+
+        Ok(issuer_auth)
+    }
+}
+
+impl IssuerAuth {
     /// Verifies the issuer's signature of the [`IssuerAuth`].
     ///
     /// If [`X509Trust`] is provided, the Issuer's authenticity is verified as
@@ -775,7 +795,7 @@ impl ValidityInfo {
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use bh_jws_utils::{Es256Verifier, HasX5Chain as _};
+    use bh_jws_utils::Es256Verifier;
 
     use super::*;
     use crate::{
@@ -784,8 +804,10 @@ mod tests {
         },
         utils::test::{validity_info, SimpleSigner},
     };
+    use bh_jws_utils::HasX5Chain;
+    use bh_jws_utils::Signer;
 
-    fn dummy_issuer_auth(current_time: u64) -> IssuerAuth {
+    fn dummy_issuer_auth_unsigned(current_time: u64) -> IssuerAuthUnsigned {
         let name_spaces = IssuerNameSpaces(
             [(
                 MDL_NAMESPACE.to_owned().into(),
@@ -819,14 +841,24 @@ mod tests {
         let issuer_signer = SimpleSigner::issuer();
         let (_, device_key) = crate::utils::test::dummy_device_key();
 
-        IssuerAuth::new(
+        IssuerAuthUnsigned::new(
             "org.iso.18013.5.1.mDL".into(),
             &name_spaces,
             device_key,
-            &issuer_signer,
+            issuer_signer.algorithm(),
+            issuer_signer.x5chain(),
             validity_info(current_time),
         )
         .unwrap()
+    }
+
+    fn dummy_issuer_auth(current_time: u64) -> IssuerAuth {
+        let issuer_auth_unsigned = dummy_issuer_auth_unsigned(current_time);
+        let sign_data = issuer_auth_unsigned.tbs_data();
+        let signer = SimpleSigner::issuer();
+        issuer_auth_unsigned
+            .sign(signer.sign(&sign_data).unwrap())
+            .unwrap()
     }
 
     #[test]
@@ -1101,5 +1133,17 @@ eb0733d667005f7467cec4b87b9381a6ba1ede8e00df29f32a37230f39a842a54821fdd223092819
         }))
         .unwrap_err();
         assert!(err.is_data());
+    }
+
+    #[test]
+    fn issuer_auth_unsigned_wrong_signature() {
+        let issuer_auth_unsigned = dummy_issuer_auth_unsigned(100);
+
+        let signature = vec![1, 1, 1, 1];
+
+        assert_matches!(
+            issuer_auth_unsigned.sign(signature).unwrap_err().error,
+            MdocError::InvalidSignature
+        );
     }
 }

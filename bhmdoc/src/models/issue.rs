@@ -19,7 +19,34 @@ use bherror::traits::ForeignError as _;
 use serde::{Deserialize, Serialize};
 
 use super::data_retrieval::{common::DocType, device_retrieval::response::IssuerSigned};
+use crate::models::data_retrieval::device_retrieval::response::IssuerUnsigned;
 use crate::{utils::base64::base64_url_encode, MdocError, Result};
+
+/// Docs
+pub struct UnsignedDocument {
+    doc_type: DocType,
+    issuer_unsigned: IssuerUnsigned,
+}
+
+impl UnsignedDocument {
+    pub(crate) fn new(doc_type: DocType, issuer_unsigned: IssuerUnsigned) -> Self {
+        Self {
+            doc_type,
+            issuer_unsigned,
+        }
+    }
+
+    pub(crate) fn tbs_data(&self) -> Vec<u8> {
+        self.issuer_unsigned.tbs_data()
+    }
+
+    pub(crate) fn issue(self, signature: Vec<u8>) -> Result<IssuedDocument> {
+        Ok(IssuedDocument {
+            doc_type: self.doc_type,
+            issuer_signed: self.issuer_unsigned.sign(signature)?,
+        })
+    }
+}
 
 /// Represents an issued `mso_mdoc` Credential.
 ///
@@ -44,13 +71,6 @@ impl IssuedDocument {
             .foreign_err(|| MdocError::IssuerAuth)?;
 
         Ok(base64_url_encode(bytes))
-    }
-
-    pub(crate) fn new(doc_type: DocType, issuer_signed: IssuerSigned) -> Self {
-        Self {
-            doc_type,
-            issuer_signed,
-        }
     }
 }
 

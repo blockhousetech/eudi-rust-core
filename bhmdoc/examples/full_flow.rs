@@ -15,6 +15,8 @@
 
 use std::{collections::HashMap, str::FromStr};
 
+use bh_jws_utils::HasX5Chain;
+use bh_jws_utils::Signer;
 use bh_jws_utils::{Es256Signer, Es256Verifier, SignerWithChain};
 use bhmdoc::{
     generate_nonce,
@@ -94,12 +96,13 @@ fn main() {
     // epoch.
     let current_time = 100;
 
-    // We issue the document using the Issuer.
-    let issued_document = Issuer
-        .issue_mdl(
+    // We receive the unsigned document using the Issuer.
+    let unsigned_document = Issuer
+        .issue_mdl_unsigned(
             mdl,
             device_key,
-            &issuer_signer,
+            issuer_signer.algorithm(),
+            issuer_signer.x5chain(),
             &mut rand::thread_rng(),
             ValidityInfo::new(
                 current_time.try_into().unwrap(),
@@ -111,6 +114,13 @@ fn main() {
             .unwrap(),
         )
         .unwrap();
+
+    // We fetch data that needs to be signed and create the required signature
+    let tbs_data = Issuer.tbs_data(&unsigned_document);
+    let signature = issuer_signer.sign(&tbs_data).unwrap();
+
+    // We issue the signed document using the Issuer.
+    let issued_document = Issuer.issue(unsigned_document, signature).unwrap();
 
     // Serialize the issued document into base64url encoded CBOR.
     let serialized_issued_document = issued_document.serialize_issuer_signed().unwrap();
