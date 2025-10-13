@@ -1054,13 +1054,42 @@ eb0733d667005f7467cec4b87b9381a6ba1ede8e00df29f32a37230f39a842a54821fdd223092819
         )
         .unwrap();
 
-        let _validity_info: ValidityInfo = serde_json::from_value(serde_json::json!({
-            "signed": "2025-08-17T16:39:57Z",
-            "validFrom": "2025-08-17T16:51:02Z",
-            "validUntil": "2025-08-17T18:11:00Z",
-            "expectedUpdate": "2025-08-17T18:10:00Z",
-        }))
+        let mut bytes = vec![];
+        ciborium::into_writer(
+            &ciborium::Value::Map(vec![
+                (
+                    ciborium::Value::Text("signed".to_owned()),
+                    ciborium::Value::Tag(
+                        0,
+                        Box::new(ciborium::Value::Text("2025-08-17T16:39:57Z".to_owned())),
+                    ),
+                ),
+                (
+                    ciborium::Value::Text("validFrom".to_owned()),
+                    ciborium::Value::Tag(
+                        0,
+                        Box::new(ciborium::Value::Text("2025-08-17T16:51:02Z".to_owned())),
+                    ),
+                ),
+                (
+                    ciborium::Value::Text("validUntil".to_owned()),
+                    ciborium::Value::Tag(
+                        0,
+                        Box::new(ciborium::Value::Text("2025-08-17T18:11:00Z".to_owned())),
+                    ),
+                ),
+                (
+                    ciborium::Value::Text("expectedUpdate".to_owned()),
+                    ciborium::Value::Tag(
+                        0,
+                        Box::new(ciborium::Value::Text("2025-08-17T18:10:00Z".to_owned())),
+                    ),
+                ),
+            ]),
+            &mut bytes,
+        )
         .unwrap();
+        let _validity_info: ValidityInfo = ciborium::from_reader(bytes.as_slice()).unwrap();
     }
 
     #[test]
