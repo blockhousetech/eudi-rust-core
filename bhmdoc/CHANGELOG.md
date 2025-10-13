@@ -19,6 +19,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - The `ValidityInfo` can no longer be created nor deserialized with
   `validFrom` set to before `signed`, and `validUntil` set to before
   `validFrom`.
+- `IssuerSigned` and `DeviceResponse` no longer allow `Base64` paddings
+  for deserializing from `base64url`-encoded strings.
 
 ## [0.3.0] - 2025-09-11
 
