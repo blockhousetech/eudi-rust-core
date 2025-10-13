@@ -21,6 +21,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
   `validFrom`.
 - `IssuerSigned` and `DeviceResponse` no longer allow `Base64` paddings
   for deserializing from `base64url`-encoded strings.
+- Untagged `tdate` values are no longer accepted, i.e., in order to
+  deserialize `DateTime`, it needs to be tagged with `0`.
 
 ## [0.3.0] - 2025-09-11
 

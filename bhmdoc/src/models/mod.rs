@@ -279,26 +279,18 @@ impl TryFrom<Value> for DateTime {
     type Error = bherror::Error<MdocError>;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
-        let value = match &value {
-            Value::Tag(MDOC_TDATE_CBOR_TAG, value) => value.as_text().ok_or_else(|| {
-                bherror::Error::root(MdocError::InvalidDateTime).ctx("`tdate` MUST be `String`")
-            })?,
-            // HACK(third-party): A certain `third-party` implementation does not tag the `tdate`
-            // value in their credentials, so we accept this as a valid `tdate` even though it is
-            // not tagged according to the spec.
-            //
-            // TODO(issues/28): Create a GitHub issue when open-sourcing which tracks that this
-            // hack can and should be removed.
-            Value::Text(value) => value,
-            _ => {
-                return Err(
-                    bherror::Error::root(MdocError::InvalidDateTime).ctx(format!(
-                        "`tdate` MUST be tagged with `{}` or be a plain `Text` value",
-                        MDOC_TDATE_CBOR_TAG
-                    )),
-                )
-            }
+        let Value::Tag(MDOC_TDATE_CBOR_TAG, value) = value else {
+            return Err(
+                bherror::Error::root(MdocError::InvalidDateTime).ctx(format!(
+                    "`tdate` MUST be tagged with `{}`",
+                    MDOC_TDATE_CBOR_TAG
+                )),
+            );
         };
+
+        let value = value.as_text().ok_or_else(|| {
+            bherror::Error::root(MdocError::InvalidDateTime).ctx("`tdate` MUST be `String`")
+        })?;
 
         value.parse::<DateTime>()
     }
@@ -493,21 +485,23 @@ mod tests {
         assert_matches!(err.error, MdocError::InvalidDateTime);
     }
 
-    // HACK(third-party): A certain `third-party` implementation does not tag the `tdate` value in
-    // their credentials, so we test if we can decode the `tdate` value without the tag.
-    //
-    // TODO(issues/28): Create a GitHub issue when open-sourcing which tracks that this hack can
-    // and should be removed.
     #[test]
-    fn test_third_party_tdate_workaround() {
-        const THIRD_PARTY_TDATE_CBOR: &str = "74323032302d31302d30315431333a33303a30325a";
-
-        let expected_datetime: DateTime = "2020-10-01T13:30:02Z".parse().unwrap();
+    fn test_cbor_tdate_untagged_fails() {
+        const THIRD_PARTY_TDATE_CBOR: &str = "74323032302d31302d30315431333a33303a30325a"; // untagged 2020-10-01T13:30:02Z
 
         let data = hex::decode(THIRD_PARTY_TDATE_CBOR).unwrap();
 
-        let decoded: DateTime = from_reader(data.as_slice()).unwrap();
+        let err = from_reader::<DateTime, _>(data.as_slice()).unwrap_err();
 
-        assert_eq!(expected_datetime, decoded);
+        assert_matches!(err, ciborium::de::Error::Semantic(None, m) if m == "Invalid value for Date Time");
+    }
+
+    #[test]
+    fn test_value_tdate_untagged_fails() {
+        let data = ciborium::Value::Text("2020-10-01T13:30:02Z".to_owned());
+
+        let err = DateTime::try_from(data).unwrap_err();
+
+        assert_matches!(err.error, MdocError::InvalidDateTime);
     }
 }
