@@ -8,6 +8,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- Check that `iss` value uses the `HTTPS` scheme.
+
 ## [0.3.0] - 2025-09-11
 
 ### Changed
