@@ -324,12 +324,11 @@ fn check_successful_response(response: &reqwest::Response) -> Result<(), Error<L
 
 /// https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-03#section-5-2
 fn check_valid_iss(alleged_iss: &Uri) -> Result<(), Error<LookupError>> {
-    // HACK(third-party) TODO(issues/54)
-    // if alleged_iss.scheme().as_str() != "https" {
-    //     return Err(Error::root(LookupError(
-    //         "iss uri scheme should be https".to_string(),
-    //     )));
-    // }
+    if alleged_iss.scheme().as_str() != "https" {
+        return Err(Error::root(LookupError(
+            "iss uri scheme should be https".to_string(),
+        )));
+    }
 
     if alleged_iss.query().is_some() || alleged_iss.fragment().is_some() {
         return Err(Error::root(LookupError(
@@ -660,8 +659,6 @@ pub(crate) mod tests {
     }
 
     // https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-03#section-5.1-1
-    // HACK(third-party) TODO(issues/54)
-    #[ignore = "disabled for integration with a third party platform without TLS"]
     #[tokio::test]
     async fn iss_scheme_not_http() {
         let alleged_iss = "git://example.com";
@@ -926,19 +923,19 @@ pub(crate) mod tests {
     /// Returns a dummy [`bhx5chain::X5Chain`] for testing purposes.
     /// The certificate has the following SAN values
     ///  * DNS: ["example.com"]
-    ///  * URI: ["http://www.tbtl.net"]
+    ///  * URI: ["https://www.tbtl.net"]
     ///  * IP:  [10.0.0.1]
     fn dummy_x5chain() -> bhx5chain::X5Chain {
         let cert = "-----BEGIN CERTIFICATE-----
-MIIBqDCCAU6gAwIBAgIUOui8k7hNx2CPRJTh/zrfEWsmhNwwCgYIKoZIzj0EAwIw
-DzENMAsGA1UEAwwEdGJ0bDAeFw0yNTAyMTcxNTAwMjFaFw0zNTAyMTUxNTAwMjFa
-MA8xDTALBgNVBAMMBHRidGwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQuI2/N
-WQ7l5Gsh6jbmYTP5jz2VHCFZ2dmGP808snXNMG3B00wvvMnc4y1YI5HTnJxwBFu3
-yUXNz94h24oO47WSo4GHMIGEMB0GA1UdDgQWBBQPk7jEwbaOrALYdRIOuoLBYAhw
-UDAfBgNVHSMEGDAWgBQPk7jEwbaOrALYdRIOuoLBYAhwUDAPBgNVHRMBAf8EBTAD
-AQH/MDEGA1UdEQQqMCiCC2V4YW1wbGUuY29thwQKAAABhhNodHRwOi8vd3d3LnRi
-dGwubmV0MAoGCCqGSM49BAMCA0gAMEUCIQC2d/1C3UW/XuwYnuczFXoORXLaZ3R9
-X+yjocUi0dWsNAIgUCIfZYkL6TODPTRuXfVbU+MyW1KYlHX0AZq7+jVKtqA=
+MIIBqDCCAU+gAwIBAgIUa3Ph3O2ChLkG2WGly2OlOA2oB/gwCgYIKoZIzj0EAwIw
+DzENMAsGA1UEAwwEdGJ0bDAeFw0yNTEwMTQxMTI3NDhaFw0zNTEwMTIxMTI3NDha
+MA8xDTALBgNVBAMMBHRidGwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARh62Ff
+2AR3vJQJFb1N/N5qQwUCIcYpc82B5wckfSlYTD9Z7or8/DHS8fl0Tx84QUSCq1j5
+EoXAsa6WyWwH/Oo9o4GIMIGFMB0GA1UdDgQWBBQcHDN+Jn8uxxWyWsvidMXsxux7
+ZTAfBgNVHSMEGDAWgBQcHDN+Jn8uxxWyWsvidMXsxux7ZTAPBgNVHRMBAf8EBTAD
+AQH/MDIGA1UdEQQrMCmCC2V4YW1wbGUuY29thwQKAAABhhRodHRwczovL3d3dy50
+YnRsLm5ldDAKBggqhkjOPQQDAgNHADBEAiAo1LhKVWisYrzCR02qweeOQaJOaEAZ
+UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
 -----END CERTIFICATE-----";
 
         let cert = X509::from_pem(cert.as_bytes()).unwrap();
@@ -948,7 +945,7 @@ X+yjocUi0dWsNAIgUCIfZYkL6TODPTRuXfVbU+MyW1KYlHX0AZq7+jVKtqA=
     /// Returns a dummy [`bhx5chain::JwtX5Chain`] for testing purposes.
     /// The certificate has the following SAN values
     ///  * DNS: ["example.com"]
-    ///  * URI: ["http://www.tbtl.net"]
+    ///  * URI: ["https://www.tbtl.net"]
     ///  * IP:  [10.0.0.1]
     fn dummy_jwt_x5chain() -> bhx5chain::JwtX5Chain {
         dummy_x5chain().try_into().unwrap()
@@ -967,7 +964,7 @@ X+yjocUi0dWsNAIgUCIfZYkL6TODPTRuXfVbU+MyW1KYlHX0AZq7+jVKtqA=
         let x5chain = dummy_x5chain();
         let jwt_x5chain = dummy_jwt_x5chain();
 
-        let alleged_iss = "http://example.com";
+        let alleged_iss = "https://example.com";
         let header = example_header_with_x5c(jwt_x5chain.clone());
 
         let public_jwk = X5ChainIssuerPublicKeyLookup::trust_all()
@@ -986,7 +983,7 @@ X+yjocUi0dWsNAIgUCIfZYkL6TODPTRuXfVbU+MyW1KYlHX0AZq7+jVKtqA=
         let x5chain = dummy_x5chain();
         let jwt_x5chain = dummy_jwt_x5chain();
 
-        let alleged_iss = "http://www.tbtl.net";
+        let alleged_iss = "https://www.tbtl.net";
         let header = example_header_with_x5c(jwt_x5chain.clone());
 
         let public_jwk = X5ChainIssuerPublicKeyLookup::trust_all()
@@ -1005,7 +1002,7 @@ X+yjocUi0dWsNAIgUCIfZYkL6TODPTRuXfVbU+MyW1KYlHX0AZq7+jVKtqA=
         let jwt_x5chain = dummy_jwt_x5chain();
         // The dummy certificate doesn't contain the full url to match the iss, also
         // the DNS value is "example.com", not a "www.example.com".
-        let alleged_iss = "http://www.example.com";
+        let alleged_iss = "https://www.example.com";
         let header = example_header_with_x5c(jwt_x5chain.clone());
 
         let err = X5ChainIssuerPublicKeyLookup::trust_all()
@@ -1021,7 +1018,7 @@ X+yjocUi0dWsNAIgUCIfZYkL6TODPTRuXfVbU+MyW1KYlHX0AZq7+jVKtqA=
 
     #[tokio::test]
     async fn test_public_key_from_x5chain_missing_header_field() {
-        let alleged_iss = "http://example.com";
+        let alleged_iss = "https://example.com";
         let header = example_header();
 
         let err = X5ChainIssuerPublicKeyLookup::trust_all()
@@ -1038,7 +1035,7 @@ X+yjocUi0dWsNAIgUCIfZYkL6TODPTRuXfVbU+MyW1KYlHX0AZq7+jVKtqA=
         let x5chain = dummy_x5chain();
         let jwt_x5chain = dummy_jwt_x5chain();
 
-        let alleged_iss = "http://example.com";
+        let alleged_iss = "https://example.com";
         let header = example_header_with_x5c(jwt_x5chain.clone());
 
         // Issuer authenticity verified
