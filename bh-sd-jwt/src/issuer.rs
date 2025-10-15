@@ -196,7 +196,6 @@ pub struct IssuerJwt {
     /// Issuer of the verifiable credential.
     ///
     /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-01#section-3.2.2.2-3.1.1)
-    // HACK(third-party) allow non-uri `iss`
     pub iss: String,
 
     /// The time before which the Verifiable Credential MUST NOT be accepted before validating.
