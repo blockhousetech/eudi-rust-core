@@ -67,7 +67,6 @@ pub trait IssuerPublicKeyLookup: Sync {
     /// Lookup a public key for the alleged Issuer Identifier.
     fn lookup(
         &self,
-        // HACK(third-party) allow non-uri iss
         alleged_iss: &str,
         header: &IssuerJwtHeader,
     ) -> impl Future<Output = Result<JwkPublic, Error<Self::Err>>> + Send;
