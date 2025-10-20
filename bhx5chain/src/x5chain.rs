@@ -117,6 +117,39 @@ impl X5Chain {
         Self::new(certs)
     }
 
+    /// Serializes the chain into a sequence of PEM-encoded X509 structure.
+    ///
+    /// The chain will be ordered in a way that leaf certificate is at first place, then goes its
+    /// parent, and so on.
+    pub fn to_pem(&self) -> Result<Vec<String>> {
+        std::iter::once(&self.leaf)
+            .chain(&self.intermediates)
+            .map(x509_to_pem)
+            .collect()
+    }
+
+    /// Constructs a [`X5Chain`] from a string of **concatenated** PEM-encoded strings.
+    ///
+    /// The chain **MUST BE** ordered in such a way that the leaf certificate is at first place,
+    /// then goes its parent, and so on.
+    ///
+    /// # Warning
+    ///
+    /// The chain is at this point **NOT VALIDATED** against any trusted root certificate. In order
+    /// to validate the chain against a trusted root certificate, use the
+    /// [`X5Chain::verify_against_trusted_roots`] method.
+    pub fn from_pem_concat(pem: &str) -> Result<Self> {
+        Self::new(X509::stack_from_pem(pem.as_bytes()).foreign_err(|| Error::X5Chain)?)
+    }
+
+    /// Serializes the chain into a string of **concatenated** PEM-encoded strings.
+    ///
+    /// The chain will be ordered in such a way that the leaf certificate is at first place,
+    /// then goes its parent, and so on.
+    pub fn to_pem_concat(&self) -> Result<String> {
+        Ok(self.to_pem()?.concat())
+    }
+
     /// Verify the [`X5Chain`] against trusted root certificates.
     ///
     /// The root certificate may be in chain, but it **MUST BE** found in `trust` as well.
@@ -224,6 +257,16 @@ impl X509Trust {
     pub fn new(trust: Vec<X509>) -> Self {
         Self(trust)
     }
+}
+
+fn x509_to_pem(x509: &X509) -> Result<String> {
+    let bytes = x509
+        .to_pem()
+        .foreign_err(|| Error::X5Chain)
+        .ctx(|| "Failed to convert x509 to pem")?;
+    String::from_utf8(bytes)
+        .foreign_err(|| Error::X5Chain)
+        .ctx(|| "Failed to convert pem bytes to utf-8 string")
 }
 
 /// Helper method for converting certificates to `Stack<x509>`.
@@ -373,8 +416,7 @@ mod tests {
     //```
     //
     // Certificates are in order: leaf, intermediary, root
-    const CERTS: &str = "
------BEGIN CERTIFICATE-----
+    const CERTS: &str = "-----BEGIN CERTIFICATE-----
 MIICGDCCAb6gAwIBAgIUaZlAtJebcQ6Zk9ZXiVZ48dSaeekwCgYIKoZIzj0EAwIw
 bTELMAkGA1UEBhMCSFIxFDASBgNVBAgMC0dyYWQgWmFncmViMQ8wDQYDVQQHDAZa
 YWdyZWIxDTALBgNVBAoMBFRCVEwxETAPBgNVBAsMCFRlYW0gQmVlMRUwEwYDVQQD
@@ -489,6 +531,56 @@ jdc01UGluQ7Pq6abMWPn5OZaPDyCSqpjbw==
         let err = X5Chain::from_pem(&["babadeda", "bla"]).unwrap_err();
         assert!(matches!(err.error, Error::X5Chain));
         assert_empty_error_stack();
+    }
+
+    #[test]
+    fn test_to_pem() {
+        let mut certs = CERTS.split_inclusive("-----END CERTIFICATE-----\n");
+        let leaf = certs.next().unwrap();
+        let intermediary = certs.next().unwrap();
+        let root = certs.next().unwrap();
+
+        let x5chain = X5Chain::from_pem(&[leaf, intermediary, root]).unwrap();
+
+        let pem = x5chain.to_pem().unwrap();
+
+        assert_eq!(pem.concat(), CERTS);
+
+        let x5chain_round_trip = X5Chain::from_pem(&pem).unwrap();
+
+        assert_eq!(x5chain, x5chain_round_trip);
+    }
+
+    #[test]
+    fn test_from_pem_concat() {
+        let mut certs = CERTS.split_inclusive("-----END CERTIFICATE-----\n");
+        let leaf = certs.next().unwrap();
+        let intermediary = certs.next().unwrap();
+        let root = certs.next().unwrap();
+
+        let x5chain_from_pem = X5Chain::from_pem(&[leaf, intermediary, root]).unwrap();
+
+        // valid chain
+        let x5chain_from_pem_concat = X5Chain::from_pem_concat(CERTS).unwrap();
+
+        assert_eq!(x5chain_from_pem, x5chain_from_pem_concat);
+
+        // empty chain is invalid
+        let err = X5Chain::from_pem_concat("").unwrap_err();
+        assert!(matches!(err.error, Error::X5Chain));
+        assert_empty_error_stack();
+
+        // invalid PEM
+        let err = X5Chain::from_pem_concat("babadedabla").unwrap_err();
+        assert!(matches!(err.error, Error::X5Chain));
+        assert_empty_error_stack();
+    }
+
+    #[test]
+    fn test_to_pem_concat() {
+        let x5chain = X5Chain::from_pem_concat(CERTS).unwrap();
+
+        assert_eq!(x5chain.to_pem_concat().unwrap(), CERTS);
     }
 
     #[test]

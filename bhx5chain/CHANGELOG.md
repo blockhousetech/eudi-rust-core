@@ -8,6 +8,11 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- Methods `to_pem`, `to_pem_concat` and `from_pem_concat` for `X5Chain` 
+  serialization and deserialization PEM format support.
+
 ## [0.3.0] - 2025-09-10
 
 ### Changed
