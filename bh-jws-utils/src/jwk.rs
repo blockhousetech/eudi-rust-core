@@ -24,6 +24,11 @@ use serde_json::{Map, Value};
 /// left to any end-consumers of the public key, such as
 /// [`SignatureVerifier`](crate::SignatureVerifier).
 pub type JwkPublic = Map<String, Value>;
+/// A JSON object meant to represent a private JWK.
+///
+/// Since this is a type alias, no aspects of the schema are enforced; this is
+/// left to any end-consumers of the private key.
+pub type JwkPrivate = Map<String, Value>;
 
 /// Models JWK Set. A JSON object that represents a set of JWKs.
 ///
