@@ -93,7 +93,7 @@ async fn main() {
 
     // issue the given credential
     let issued_sd_jwt = issuer
-        .issue(jwt_payload, DISCLOSEABLE_CLAIMS, &issuer_signer, &mut rng)
+        .issue_with_x5c(jwt_payload, DISCLOSEABLE_CLAIMS, &issuer_signer, &mut rng)
         .unwrap()
         .into_string_compact();
 

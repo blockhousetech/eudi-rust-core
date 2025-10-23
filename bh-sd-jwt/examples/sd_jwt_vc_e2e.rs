@@ -239,7 +239,7 @@ fn issuer(signer: &Es256SignerWithChain, key_binding_public_key: JwkPublic) -> S
     jwt_payload.exp = Some(EXP);
 
     let issued_sd_jwt = issuer
-        .issue(
+        .issue_with_x5c(
             jwt_payload,
             DISCLOSURE_PATHS,
             signer,

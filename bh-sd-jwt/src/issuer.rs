@@ -75,6 +75,48 @@ impl<H: Hasher> Issuer<H> {
         Self { hasher }
     }
 
+    /// TODO: docs
+    pub fn issue_with_x5c<S: JwtSigner + HasX5Chain, R: CryptoRngCore + ?Sized>(
+        &self,
+        jwt_payload: IssuerJwt,
+        disclosure_paths: &[&JsonNodePath],
+        signer: &S,
+        rng: &mut R,
+    ) -> Result<IssuedSdJwt> {
+        let x5c = signer
+            .x5chain()
+            .try_into()
+            .with_err(|| IssuerError::SigningFailed)
+            .ctx(|| "invalid Issuer X.509 certificate chain")?;
+
+        let jwt_header = IssuerJwtHeader {
+            typ: TYP_VC_SD_JWT.into(),
+            kid: None,
+            alg: signer.algorithm(),
+            x5c: Some(x5c),
+        };
+
+        self.issue(jwt_payload, disclosure_paths, signer, rng, jwt_header)
+    }
+
+    /// TODO: docs
+    pub fn issue_with_kid<S: JwtSigner + HasJwkKid, R: CryptoRngCore + ?Sized>(
+        &self,
+        jwt_payload: IssuerJwt,
+        disclosure_paths: &[&JsonNodePath],
+        signer: &S,
+        rng: &mut R,
+    ) -> Result<IssuedSdJwt> {
+        let jwt_header = IssuerJwtHeader {
+            typ: TYP_VC_SD_JWT.into(),
+            kid: Some(signer.jwk_kid().to_owned()),
+            alg: signer.algorithm(),
+            x5c: None,
+        };
+
+        self.issue(jwt_payload, disclosure_paths, signer, rng, jwt_header)
+    }
+
     /// Create a new SD-JWT with disclosures for the JSON nodes at the provided
     /// paths, if they all exist.
     ///
@@ -83,12 +125,13 @@ impl<H: Hasher> Issuer<H> {
     /// in more detail in the [draft].
     ///
     /// [draft]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-selective-disclosure-jwt#name-example-sd-jwt-with-recursi
-    pub fn issue<S: JwtSigner + HasJwkKid + HasX5Chain, R: CryptoRngCore + ?Sized>(
+    fn issue<S: JwtSigner, R: CryptoRngCore + ?Sized>(
         &self,
         mut jwt_payload: IssuerJwt,
         disclosure_paths: &[&JsonNodePath],
         signer: &S,
         rng: &mut R,
+        jwt_header: IssuerJwtHeader
     ) -> Result<IssuedSdJwt> {
         // TODO(issues/49) be careful to match hasher collision resistance to the signing algorithm
 
@@ -104,20 +147,7 @@ impl<H: Hasher> Issuer<H> {
         let disclosures =
             encoder::encode_claims(&mut jwt_payload.claims, disclosure_paths, &self.hasher, rng)?;
 
-        let x5c = signer
-            .x5chain()
-            .try_into()
-            .with_err(|| IssuerError::SigningFailed)
-            .ctx(|| "invalid Issuer X.509 certificate chain")?;
-
-        let header = IssuerJwtHeader {
-            typ: TYP_VC_SD_JWT.into(),
-            // TODO(issues/45) - we removed kid because this is incompatible with referent verifier
-            kid: None,
-            alg: signer.algorithm(),
-            x5c: Some(x5c),
-        };
-        let unsigned_token = jwt::Token::new(header, jwt_payload);
+        let unsigned_token = jwt::Token::new(jwt_header, jwt_payload);
         let signed_token = signer
             .sign_jwt(unsigned_token)
             .foreign_boxed_err(|| IssuerError::SigningFailed)?;
@@ -490,7 +520,7 @@ pub(crate) mod tests {
     ) -> IssuedSdJwt {
         let public_jwk = issuer_jwt.cnf.jwk.clone();
         Issuer::new(Sha256)
-            .issue(
+            .issue_with_x5c(
                 issuer_jwt,
                 disclosure_paths,
                 &StubSigner::new(public_jwk, X5Chain::dummy()),
@@ -509,7 +539,7 @@ pub(crate) mod tests {
         // Create disclosures for paths that exist and are supported
         // Sign the JWT using a symbolic signer and assemble the SD-JWT
         let issued_sd_jwt = issuer
-            .issue(
+            .issue_with_x5c(
                 issuer_jwt,
                 TEST_DISCLOSURE_PATHS,
                 &StubSigner::default(),
@@ -560,7 +590,7 @@ pub(crate) mod tests {
         ];
         for path in non_existent_paths {
             let disclosure_paths = &[*path];
-            let non_existent_path = issuer.issue(
+            let non_existent_path = issuer.issue_with_x5c(
                 test_issuer_jwt(),
                 disclosure_paths,
                 &StubSigner::default(),
@@ -573,7 +603,7 @@ pub(crate) mod tests {
         }
 
         let invalid_path: &JsonNodePath = &[Index(42)];
-        let error = issuer.issue(
+        let error = issuer.issue_with_x5c(
             test_issuer_jwt(),
             &[invalid_path],
             &StubSigner::default(),
@@ -585,7 +615,7 @@ pub(crate) mod tests {
         );
         let empty_path: &JsonNodePath = &[];
         let disclosure_paths = &[empty_path];
-        let error = issuer.issue(
+        let error = issuer.issue_with_x5c(
             test_issuer_jwt(),
             disclosure_paths,
             &StubSigner::default(),
@@ -602,7 +632,7 @@ pub(crate) mod tests {
             .chain(REGISTERED_CLAIM_NAMES.iter())
         {
             let path = &[Key(claim)];
-            let error = issuer.issue(
+            let error = issuer.issue_with_x5c(
                 test_issuer_jwt(),
                 &[path],
                 &StubSigner::default(),
@@ -618,7 +648,7 @@ pub(crate) mod tests {
         let registered_path = &[Key("iss")];
         let valid_path = &[Key("parent"), Key("child1")];
 
-        let error = issuer.issue(
+        let error = issuer.issue_with_x5c(
             test_issuer_jwt(),
             &[valid_path, registered_path],
             &StubSigner::default(),
@@ -637,7 +667,7 @@ pub(crate) mod tests {
 
         let path = &[Key("parent"), Key("child1"), Index(3), Key("nested")];
         let _ = issuer
-            .issue(
+            .issue_with_x5c(
                 test_issuer_jwt(),
                 &[path],
                 &StubSigner::default(),
@@ -687,7 +717,7 @@ pub(crate) mod tests {
         let issuer = Issuer::new(Sha256);
 
         let sd_jwt = issuer
-            .issue(
+            .issue_with_x5c(
                 issuer_jwt,
                 &[&[Key("sub")]],
                 &StubSigner::default(),
