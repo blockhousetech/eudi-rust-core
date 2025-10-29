@@ -8,10 +8,14 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
-- Changed `Es256Signer` (de)serialization representation from PEM representation
-  as bytes to JWK representation.
+### Added
 - Added `private_key_pem` and `private_jwk` methods for `Es256Signer` to
   complete the method suite of useful `Es256Signer` serializations.
+- Added `JwkPrivate` to improve JWK ecosystem.
+
+### Changed
+- Changed `Es256Signer` (de)serialization representation from PEM representation
+  as bytes to JWK representation.
 
 ## [0.5.1] - 2025-09-12
 
