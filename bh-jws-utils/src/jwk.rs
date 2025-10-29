@@ -15,6 +15,20 @@
 
 use std::collections::HashSet;
 
+use crate::check_256bit_len;
+use crate::openssl_ec_priv_key_to_jwk;
+use crate::public_key_from_jwk_es256;
+use crate::CryptoError;
+use crate::EcPrivate;
+use crate::FormatError;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use bherror::traits::ForeignError;
+use openssl::bn::BigNum;
+use secrecy::ExposeSecret;
+use secrecy::SecretString;
+use serde::Deserializer;
+use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -24,11 +38,77 @@ use serde_json::{Map, Value};
 /// left to any end-consumers of the public key, such as
 /// [`SignatureVerifier`](crate::SignatureVerifier).
 pub type JwkPublic = Map<String, Value>;
-/// A JSON object meant to represent a private JWK.
+
+/// Struct representing private JWK - public JWK + private key part of JWK.
 ///
-/// Since this is a type alias, no aspects of the schema are enforced; this is
-/// left to any end-consumers of the private key.
-pub type JwkPrivate = Map<String, Value>;
+/// JWK schema is not enforced; this is left to any end-consumers of the private key.
+///
+/// Note: Reason for having a special struct for private JWK is handling of
+///       private key part more carefully (storing in in `SecretString`).
+#[derive(Serialize, Deserialize)]
+pub struct JwkPrivate {
+    /// Public part of JWK. [RFC7518]
+    ///
+    /// [RFC7518]: https://datatracker.ietf.org/doc/html/rfc7518#section-6.2.1
+    #[serde(flatten)]
+    pub jwk_public: JwkPublic,
+    /// Private key part of JWK - "d" parameter containing the Elliptic
+    /// Curve private key value. [RFC7518]
+    ///
+    /// [RFC7518]: https://datatracker.ietf.org/doc/html/rfc7518#section-6.2.2.1
+    #[serde(
+        rename = "d", // NOTE: attribute requires a string literal, could not place a constant
+                      // variable here
+        serialize_with = "serialize_secret_string",
+        deserialize_with = "deserialize_secret_string"
+    )]
+    pub private_key_part: SecretString,
+}
+
+fn serialize_secret_string<S>(secret: &SecretString, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(secret.expose_secret())
+}
+
+fn deserialize_secret_string<'de, D>(deserializer: D) -> Result<SecretString, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Ok(SecretString::from(s))
+}
+
+impl TryFrom<&EcPrivate> for JwkPrivate {
+    type Error = bherror::Error<CryptoError>;
+
+    fn try_from(key: &EcPrivate) -> Result<Self, Self::Error> {
+        openssl_ec_priv_key_to_jwk(key, None)
+    }
+}
+
+impl TryInto<EcPrivate> for &JwkPrivate {
+    type Error = bherror::Error<FormatError>;
+
+    fn try_into(self) -> Result<EcPrivate, Self::Error> {
+        let d = URL_SAFE_NO_PAD
+            .decode(self.private_key_part.expose_secret())
+            .foreign_err(|| {
+                FormatError::JwkParsingFailed("decoding private key part failed".to_string())
+            })?;
+        let d = BigNum::from_slice(check_256bit_len(&d)?).foreign_err(|| {
+            FormatError::JwkParsingFailed("Failed to construct BigNum".to_string())
+        })?;
+
+        let public_key = public_key_from_jwk_es256(&self.jwk_public)?;
+
+        EcPrivate::from_private_components(public_key.group(), d.as_ref(), public_key.public_key())
+            .foreign_err(|| {
+                FormatError::JwkParsingFailed("private key construction failed".to_string())
+            })
+    }
+}
 
 /// Models JWK Set. A JSON object that represents a set of JWKs.
 ///

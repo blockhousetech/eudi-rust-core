@@ -14,6 +14,9 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use crate::JwkPrivate;
+use secrecy::ExposeSecret;
+use secrecy::SecretBox;
+use secrecy::SecretString;
 use serde_json::Map;
 use serde_json::Value;
 use std::result::Result as StdResult;
@@ -39,10 +42,9 @@ use crate::{
     json_object, BoxError, JwkPublic,
 };
 use openssl::bn::BigNumRef;
-use serde::ser::SerializeMap;
 
-type EcPrivate = EcKey<Private>;
-type EcPublic = EcKey<Public>;
+pub(crate) type EcPrivate = EcKey<Private>;
+pub(crate) type EcPublic = EcKey<Public>;
 
 /// A 32-byte coordinate for the elliptic curve.
 pub type Coordinate = [u8; 32];
@@ -102,13 +104,15 @@ impl Es256Signer {
     }
 
     /// Return the private key in PEM format.
-    pub fn private_key_pem(&self) -> Result<String, CryptoError> {
+    pub fn private_key_pem(&self) -> Result<SecretString, CryptoError> {
         let private_key_pem = self
             .private_key
             .private_key_to_pem()
             .foreign_err(|| CryptoError::CryptoBackend)?;
 
-        Ok(String::from_utf8(private_key_pem).expect("PEM should be valid UTF-8"))
+        Ok(SecretString::from(
+            String::from_utf8(private_key_pem).expect("PEM should be valid UTF-8"),
+        ))
     }
 
     /// Return the corresponding public key in PEM format.
@@ -121,7 +125,7 @@ impl Es256Signer {
         Ok(String::from_utf8(public_key_pem).expect("PEM should be valid UTF-8"))
     }
 
-    /// Construct a JWK JSON object for this **private** key.
+    /// Construct a JWK JSON object for **private** key of this signer.
     /// It will use the `kid` field set at construction.
     pub fn private_jwk(&self) -> Result<JwkPrivate, CryptoError> {
         openssl_ec_priv_key_to_jwk(&self.private_key, Some(&self.kid))
@@ -207,28 +211,18 @@ fn serialize_key_jwk<S>(private_key: &EcPrivate, serializer: S) -> StdResult<S::
 where
     S: Serializer,
 {
-    let jwk = openssl_ec_priv_key_to_jwk(private_key, None).map_err(serde::ser::Error::custom)?;
-
-    let mut map = serializer.serialize_map(Some(jwk.len()))?;
-    for (key, value) in jwk {
-        map.serialize_entry(&key, &value)?;
-    }
-    map.end()
+    // The `jwk` this function produces is flatten during `Es256Signer` serialization
+    // and `kid` part is added by serde separately
+    let jwk = JwkPrivate::try_from(private_key).map_err(serde::ser::Error::custom)?;
+    jwk.serialize(serializer)
 }
 /// Deserialize the private key from JWK format.
 fn deserialize_key_jwk<'de, D>(deserializer: D) -> StdResult<EcPrivate, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let jwk = serde_json::Map::deserialize(deserializer).map_err(serde::de::Error::custom)?;
-    let d = parse_coord(&jwk, "d").map_err(serde::de::Error::custom)?;
-    let public_key = public_key_from_jwk_es256(&jwk).map_err(serde::de::Error::custom)?;
-
-    EcPrivate::from_private_components(public_key.group(), d.as_ref(), public_key.public_key())
-        .foreign_err(|| {
-            FormatError::JwkParsingFailed("private key construction failed".to_string())
-        })
-        .map_err(serde::de::Error::custom)
+    let jwk = JwkPrivate::deserialize(deserializer)?;
+    (&jwk).try_into().map_err(serde::de::Error::custom)
 }
 
 /// Construct a JWK JSON object for provided **public** key.
@@ -243,20 +237,27 @@ pub fn openssl_ec_pub_key_to_jwk(
 
 /// Constructs a JWK JSON object for provided **private** key.
 /// **Note**: only ECDSA keys using P-256 curve are supported!
-fn openssl_ec_priv_key_to_jwk(
+pub(crate) fn openssl_ec_priv_key_to_jwk(
     private_key: &EcPrivate,
     kid: Option<&str>,
 ) -> Result<JwkPrivate, CryptoError> {
     let (x_bytes, y_bytes) = to_affine_coords(private_key.public_key(), private_key.group())?;
-    let d_bytes = bignum_to_vec32_bytes(private_key.private_key())?;
+    let private_key_bytes: SecretBox<_> = private_key
+        .private_key()
+        .to_vec_padded(32)
+        .foreign_err(|| CryptoError::CryptoBackend)?
+        .into();
 
-    Ok(ec_private_affine_coords_to_jwk(
-        &x_bytes, &y_bytes, &d_bytes, kid,
-    ))
+    Ok(JwkPrivate {
+        jwk_public: ec_public_affine_coords_to_jwk(&x_bytes, &y_bytes, kid),
+        private_key_part: SecretString::from(utils::base64_url_encode(
+            private_key_bytes.expose_secret(),
+        )),
+    })
 }
 
-/// Constructs the JWK from the coordinates of the **public** ECDSA key using
-/// P-256 curve.
+/// Constructs the `JwkPublic` from the coordinates of the public ECDSA key
+/// using P-256 curve.
 ///
 /// **Note**: this function **DOES NOT** check that the coordinates are valid.
 fn ec_public_affine_coords_to_jwk(
@@ -264,33 +265,6 @@ fn ec_public_affine_coords_to_jwk(
     y_bytes: &[u8; 32],
     kid: Option<&str>,
 ) -> JwkPublic {
-    ec_affine_coords_to_jwk(x_bytes, y_bytes, None, kid)
-}
-
-/// Constructs the JWK from the coordinates of the **private** ECDSA key using
-/// P-256 curve.
-///
-/// **Note**: this function **DOES NOT** check that the coordinates are valid.
-fn ec_private_affine_coords_to_jwk(
-    x_bytes: &[u8; 32],
-    y_bytes: &[u8; 32],
-    d_bytes: &[u8; 32],
-    kid: Option<&str>,
-) -> JwkPrivate {
-    ec_affine_coords_to_jwk(x_bytes, y_bytes, Some(d_bytes), kid)
-}
-
-/// Constructs the JWK from the coordinates of the ECDSA key using P-256
-/// curve. If `d_bytes` parameter is provided JWK represents private key
-/// values, in other case it provides public key values.
-///
-/// **Note**: this function **DOES NOT** check that the coordinates are valid.
-fn ec_affine_coords_to_jwk(
-    x_bytes: &[u8; 32],
-    y_bytes: &[u8; 32],
-    d_bytes: Option<&[u8; 32]>,
-    kid: Option<&str>,
-) -> Map<String, Value> {
     let x = utils::base64_url_encode(x_bytes);
     let y = utils::base64_url_encode(y_bytes);
 
@@ -303,10 +277,6 @@ fn ec_affine_coords_to_jwk(
         "y": y,
     });
 
-    if let Some(d_bytes) = d_bytes {
-        let d = utils::base64_url_encode(d_bytes);
-        jwk.insert("d".to_owned(), serde_json::Value::String(d));
-    }
     if let Some(kid) = kid {
         jwk.insert("kid".to_owned(), serde_json::Value::String(kid.to_owned()));
     }
@@ -343,12 +313,12 @@ fn bignum_to_vec32_bytes(bignum: &BigNumRef) -> Result<Box<[u8; 32]>, CryptoErro
         .unwrap())
 }
 
-pub(crate) fn public_key_from_jwk_es256(public_key: &JwkPublic) -> Result<EcPublic, FormatError> {
-    check_jwk_field(public_key, "kty", KTY)?;
-    check_jwk_field(public_key, "crv", CRV)?;
+pub(crate) fn public_key_from_jwk_es256(jwk: &JwkPublic) -> Result<EcPublic, FormatError> {
+    check_jwk_field(jwk, "kty", KTY)?;
+    check_jwk_field(jwk, "crv", CRV)?;
 
-    let x = parse_coord(public_key, "x")?;
-    let y = parse_coord(public_key, "y")?;
+    let x = parse_256bit_bignum(jwk, "x")?;
+    let y = parse_256bit_bignum(jwk, "y")?;
 
     // The unwrap is safe because we always use the same curve.
     let group = EcGroup::from_curve_name(ELLIPTIC_CURVE_NID).unwrap();
@@ -360,20 +330,15 @@ pub(crate) fn public_key_from_jwk_es256(public_key: &JwkPublic) -> Result<EcPubl
     Ok(public_key)
 }
 
-fn check_len(coord: &[u8]) -> Result<&[u8; 32], FormatError> {
-    <&[u8; 32]>::try_from(coord)
-        .foreign_err(|| FormatError::JwkParsingFailed("parsing coord failed".to_string()))
-        .ctx(|| format!("check len of {:?} failed", coord))
+pub(crate) fn check_256bit_len(num: &[u8]) -> Result<&[u8; 32], FormatError> {
+    <&[u8; 32]>::try_from(num)
+        .foreign_err(|| FormatError::JwkParsingFailed("parsing 256bit value failed".to_string()))
 }
 
-fn check_jwk_field(
-    public_key: &JwkPublic,
-    field: &str,
-    expected_value: &str,
-) -> Result<(), FormatError> {
+fn check_jwk_field(jwk: &JwkPublic, field: &str, expected_value: &str) -> Result<(), FormatError> {
     let error = |message| Error::root(FormatError::JwkParsingFailed(message));
 
-    let value = public_key
+    let value = jwk
         .get(field)
         .ok_or_else(|| error(format!("missing \"{}\" field", field)))?;
 
@@ -389,20 +354,18 @@ fn check_jwk_field(
     })
 }
 
-fn parse_coord(public_key: &Map<String, Value>, coord: &str) -> Result<BigNum, FormatError> {
+fn parse_256bit_bignum(jwk: &Map<String, Value>, field: &str) -> Result<BigNum, FormatError> {
     let error = |message| bherror::Error::root(FormatError::JwkParsingFailed(message));
 
-    let base64_coord = public_key
-        .get(coord)
-        .ok_or_else(|| error(format!("fetching coordinate {} failed", coord)))?
+    let base64_num = jwk
+        .get(field)
+        .ok_or_else(|| error(format!("fetching number {} failed", field)))?
         .as_str()
-        .ok_or_else(|| error("coord not str".to_string()))
-        .ctx(|| format!("coord {0} as str failed", coord))?;
-    let coord = URL_SAFE_NO_PAD
-        .decode(base64_coord)
-        .foreign_err(|| FormatError::JwkParsingFailed("decoding coord failed".to_string()))
-        .ctx(|| format!("decoding coord {0} failed", base64_coord))?;
-    BigNum::from_slice(check_len(&coord)?)
+        .ok_or_else(|| error(format!("field `{}` value not str", field)))?;
+    let num = URL_SAFE_NO_PAD.decode(base64_num).foreign_err(|| {
+        FormatError::JwkParsingFailed(format!("decoding field `{}` value not str", field))
+    })?;
+    BigNum::from_slice(check_256bit_len(&num)?)
         .foreign_err(|| FormatError::JwkParsingFailed("Failed to construct BigNum".to_string()))
 }
 
@@ -499,7 +462,7 @@ mod tests {
         let signer: Es256Signer = serde_json::from_value(jwk).unwrap();
         let pem = signer.private_key_pem().unwrap();
 
-        assert_eq!(pem, expected_pem);
+        assert_eq!(pem.expose_secret(), expected_pem);
     }
 
     #[test]
