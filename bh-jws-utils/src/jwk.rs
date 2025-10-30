@@ -41,14 +41,13 @@ use openssl::ec::EcKey;
 /// [`SignatureVerifier`](crate::SignatureVerifier).
 pub type JwkPublic = Map<String, Value>;
 
-/// Struct representing private JWK - public JWK + private key part of JWK.
-///
-/// JWK schema is not enforced; this is left to any end-consumers of the private key.
+/// Struct representing private JWK for keys which use elliptic curve algorithms
+/// It contains public JWK and a private key part `d` of JWK.
 ///
 /// Note: Reason for having a special struct for private JWK is handling of
 ///       private key part more carefully (storing in in `SecretString`).
 #[derive(Serialize, Deserialize)]
-pub struct JwkPrivate {
+pub struct EcJwkPrivate {
     /// Public part of JWK. [RFC7518]
     ///
     /// [RFC7518]: https://datatracker.ietf.org/doc/html/rfc7518#section-6.2.1
@@ -81,7 +80,7 @@ where
     Ok(SecretString::from(s))
 }
 
-impl JwkPrivate {
+impl EcJwkPrivate {
     /// Constructs a JWK JSON object for provided **private** key.
     /// **Note**: only ECDSA keys using P-256 curve are supported!
     pub fn from_openssl(private_key: &EcPrivate) -> bherror::Result<Self, CryptoError> {

@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use crate::JwkPrivate;
+use crate::EcJwkPrivate;
 use secrecy::ExposeSecret;
 use secrecy::SecretBox;
 use secrecy::SecretString;
@@ -127,7 +127,7 @@ impl Es256Signer {
 
     /// Construct a JWK JSON object for **private** key of this signer.
     /// It will use the `kid` field set at construction.
-    pub fn private_jwk(&self) -> Result<JwkPrivate, CryptoError> {
+    pub fn private_jwk(&self) -> Result<EcJwkPrivate, CryptoError> {
         openssl_ec_priv_key_to_jwk(&self.private_key, Some(&self.kid))
     }
 
@@ -213,7 +213,7 @@ where
 {
     // The `jwk` this function produces is flatten during `Es256Signer` serialization
     // and `kid` part is added by serde separately
-    let jwk = JwkPrivate::from_openssl(private_key).map_err(serde::ser::Error::custom)?;
+    let jwk = EcJwkPrivate::from_openssl(private_key).map_err(serde::ser::Error::custom)?;
     jwk.serialize(serializer)
 }
 /// Deserialize the private key from JWK format.
@@ -221,7 +221,7 @@ fn deserialize_key_jwk<'de, D>(deserializer: D) -> StdResult<EcPrivate, D::Error
 where
     D: Deserializer<'de>,
 {
-    let jwk = JwkPrivate::deserialize(deserializer)?;
+    let jwk = EcJwkPrivate::deserialize(deserializer)?;
     jwk.to_openssl().map_err(serde::de::Error::custom)
 }
 
@@ -240,7 +240,7 @@ pub fn openssl_ec_pub_key_to_jwk(
 pub(crate) fn openssl_ec_priv_key_to_jwk(
     private_key: &EcPrivate,
     kid: Option<&str>,
-) -> Result<JwkPrivate, CryptoError> {
+) -> Result<EcJwkPrivate, CryptoError> {
     let (x_bytes, y_bytes) = to_affine_coords(private_key.public_key(), private_key.group())?;
     let private_key_bytes: SecretBox<_> = private_key
         .private_key()
@@ -248,7 +248,7 @@ pub(crate) fn openssl_ec_priv_key_to_jwk(
         .foreign_err(|| CryptoError::CryptoBackend)?
         .into();
 
-    Ok(JwkPrivate {
+    Ok(EcJwkPrivate {
         jwk_public: ec_public_affine_coords_to_jwk(&x_bytes, &y_bytes, kid),
         private_key_part: SecretString::from(utils::base64_url_encode(
             private_key_bytes.expose_secret(),
