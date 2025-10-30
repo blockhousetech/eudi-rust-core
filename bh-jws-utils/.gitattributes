@@ -1,0 +1,4 @@
+# Unsets `text` attribute to disable end-of-line conversion upon
+# checkin or checkout.
+files/private_key.pem -text
+files/public_key.pem -text
