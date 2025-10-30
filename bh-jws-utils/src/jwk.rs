@@ -59,8 +59,7 @@ pub struct JwkPrivate {
     ///
     /// [RFC7518]: https://datatracker.ietf.org/doc/html/rfc7518#section-6.2.2.1
     #[serde(
-        rename = "d", // NOTE: attribute requires a string literal, could not place a constant
-                      // variable here
+        rename = "d",
         serialize_with = "serialize_secret_string",
         deserialize_with = "deserialize_secret_string"
     )]
