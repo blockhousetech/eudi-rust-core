@@ -25,14 +25,14 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use bherror::traits::ForeignError;
 use openssl::bn::BigNum;
+use openssl::ec::EcKey;
+use openssl::pkey::Private;
 use secrecy::ExposeSecret;
 use secrecy::SecretString;
 use serde::Deserializer;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use openssl::pkey::Private;
-use openssl::ec::EcKey;
 
 /// A JSON object meant to represent a public JWK.
 ///
