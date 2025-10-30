@@ -31,6 +31,8 @@ use serde::Deserializer;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use openssl::pkey::Private;
+use openssl::ec::EcKey;
 
 /// A JSON object meant to represent a public JWK.
 ///
@@ -80,18 +82,15 @@ where
     Ok(SecretString::from(s))
 }
 
-impl TryFrom<&EcPrivate> for JwkPrivate {
-    type Error = bherror::Error<CryptoError>;
-
-    fn try_from(key: &EcPrivate) -> Result<Self, Self::Error> {
-        openssl_ec_priv_key_to_jwk(key, None)
+impl JwkPrivate {
+    /// Constructs a JWK JSON object for provided **private** key.
+    /// **Note**: only ECDSA keys using P-256 curve are supported!
+    pub fn from_openssl(private_key: &EcPrivate) -> bherror::Result<Self, CryptoError> {
+        openssl_ec_priv_key_to_jwk(private_key, None)
     }
-}
 
-impl TryInto<EcPrivate> for &JwkPrivate {
-    type Error = bherror::Error<FormatError>;
-
-    fn try_into(self) -> Result<EcPrivate, Self::Error> {
+    /// Constructs a `EcKey<Private>` from private JWK.
+    pub fn to_openssl(&self) -> bherror::Result<EcKey<Private>, FormatError> {
         let d = URL_SAFE_NO_PAD
             .decode(self.private_key_part.expose_secret())
             .foreign_err(|| {

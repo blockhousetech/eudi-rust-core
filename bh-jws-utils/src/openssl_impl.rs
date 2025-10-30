@@ -213,7 +213,7 @@ where
 {
     // The `jwk` this function produces is flatten during `Es256Signer` serialization
     // and `kid` part is added by serde separately
-    let jwk = JwkPrivate::try_from(private_key).map_err(serde::ser::Error::custom)?;
+    let jwk = JwkPrivate::from_openssl(private_key).map_err(serde::ser::Error::custom)?;
     jwk.serialize(serializer)
 }
 /// Deserialize the private key from JWK format.
@@ -222,7 +222,7 @@ where
     D: Deserializer<'de>,
 {
     let jwk = JwkPrivate::deserialize(deserializer)?;
-    (&jwk).try_into().map_err(serde::de::Error::custom)
+    jwk.to_openssl().map_err(serde::de::Error::custom)
 }
 
 /// Construct a JWK JSON object for provided **public** key.
