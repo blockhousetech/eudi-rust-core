@@ -359,7 +359,7 @@ fn parse_256bit_bignum(jwk: &Map<String, Value>, field: &str) -> Result<BigNum, 
 
     let base64_num = jwk
         .get(field)
-        .ok_or_else(|| error(format!("fetching number {} failed", field)))?
+        .ok_or_else(|| error(format!("fetching field {} failed", field)))?
         .as_str()
         .ok_or_else(|| error(format!("field `{}` value not str", field)))?;
     let num = URL_SAFE_NO_PAD.decode(base64_num).foreign_err(|| {
