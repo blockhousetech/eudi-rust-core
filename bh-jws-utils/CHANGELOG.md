@@ -12,7 +12,6 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - Added `private_key_pem`, `private_jwk` and `from_private_jwk` methods for
   `Es256Signer` to complete the method suite of useful `Es256Signer` serializations.
 - Added `JwkPrivate` to improve JWK ecosystem.
-- Derived `Clone` for `Es256Signer`
 
 ### Changed
 - Changed `Es256Signer` (de)serialization representation from PEM representation
