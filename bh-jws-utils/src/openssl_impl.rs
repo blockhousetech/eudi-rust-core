@@ -64,7 +64,7 @@ pub(crate) const ELLIPTIC_CURVE_NID: Nid = Nid::X9_62_PRIME256V1;
 
 /// [`Signer`] implementation supporting the `ES256` algorithm (ECDSA using the
 /// P-256 curve and the SHA-256 hash function).
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Es256Signer {
     #[serde(
         flatten,
@@ -260,7 +260,7 @@ pub(crate) fn openssl_ec_priv_key_to_jwk(
 /// using P-256 curve.
 ///
 /// **Note**: this function **DOES NOT** check that the coordinates are valid.
-fn ec_public_affine_coords_to_jwk(
+pub fn ec_public_affine_coords_to_jwk(
     x_bytes: &[u8; 32],
     y_bytes: &[u8; 32],
     kid: Option<&str>,
