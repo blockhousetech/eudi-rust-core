@@ -41,17 +41,12 @@ pub(crate) const SHA_256_ALG_NAME: &str = "sha-256";
 ///
 /// [Named Information Hash Algorithm Registry]: https://www.iana.org/assignments/named-information/named-information.xhtml
 /// [here]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-selective-disclosure-jwt-07#name-hash-function-claim
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HashingAlgorithm {
     /// SHA-256 algorithm for hashing.
     #[serde(rename = "sha-256")]
+    #[default]
     Sha256,
-}
-
-impl Default for HashingAlgorithm {
-    fn default() -> Self {
-        Self::Sha256
-    }
 }
 
 impl HashingAlgorithm {
