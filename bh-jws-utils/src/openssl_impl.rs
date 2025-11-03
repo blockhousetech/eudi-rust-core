@@ -131,6 +131,20 @@ impl Es256Signer {
         openssl_ec_priv_key_to_jwk(&self.private_key, Some(&self.kid))
     }
 
+    /// Create a `Es256Signer` from private key in the JWK format.
+    /// Note: It is expected JWK contains `kid` field.
+    pub fn from_private_jwk(jwk_private: &EcJwkPrivate) -> Result<Self, FormatError> {
+        let Some(kid) = jwk_private.jwk_public.get("kid").and_then(|v| v.as_str()) else {
+            return Err(bherror::Error::root(FormatError::JwkParsingFailed(
+                "Missing `kid` field".to_string(),
+            )));
+        };
+        Ok(Es256Signer {
+            private_key: jwk_private.to_openssl()?,
+            kid: kid.to_string(),
+        })
+    }
+
     /// Construct a JWK JSON object for the **public** counterpart of this key.
     /// It will use the `kid` field set at construction.
     pub fn public_jwk(&self) -> Result<JwkPublic, CryptoError> {
@@ -260,7 +274,7 @@ pub(crate) fn openssl_ec_priv_key_to_jwk(
 /// using P-256 curve.
 ///
 /// **Note**: this function **DOES NOT** check that the coordinates are valid.
-fn ec_public_affine_coords_to_jwk(
+pub fn ec_public_affine_coords_to_jwk(
     x_bytes: &[u8; 32],
     y_bytes: &[u8; 32],
     kid: Option<&str>,
