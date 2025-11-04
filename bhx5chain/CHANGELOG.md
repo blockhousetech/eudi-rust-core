@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-11-04
+
 ### Added
 
 - Methods `to_pem`, `to_pem_concat` and `from_pem_concat` for `X5Chain` 
