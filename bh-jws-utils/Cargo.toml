@@ -1,6 +1,6 @@
 [package]
 name = "bh-jws-utils"
-version = "0.5.1"
+version = "0.6.0"
 authors = ["TBTL Tech <tech@tbtl.com>"]
 categories = ["cryptography"]
 description = "TBTL's library for handling JSON Web Signatures (JWS)."
@@ -13,7 +13,7 @@ repository = "https://github.com/blockhousetech/eudi-rust-core"
 [dependencies]
 base64 = "0.21.7"
 bherror = "0.1"
-bhx5chain = "0.3"
+bhx5chain = "0.3.1"
 # `jwt` crate supports cryptography backend injection for signing/verification
 # via traits, unlike the much more popular `jsonwebtoken`
 jwt = "0.16.0"
@@ -26,7 +26,7 @@ serde_json = "1.0.111"
 strum_macros = "0.27"
 
 [dev-dependencies]
-bhx5chain = { version = "0.3", features = ["test-utils"] }
+bhx5chain = { version = "0.3.1", features = ["test-utils"] }
 
 [package.metadata.docs.rs]
 all-features = true
