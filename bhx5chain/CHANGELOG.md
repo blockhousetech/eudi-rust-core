@@ -55,7 +55,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - Initial version of the `bhx5chain` crate.
 
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhx5chain/v0.3.0...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhx5chain/v0.3.1...HEAD>
+[0.3.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.3.1>
 [0.3.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.3.0>
 [0.2.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.2.1>
 [0.2.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.2.0>
