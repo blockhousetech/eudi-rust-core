@@ -310,6 +310,12 @@ impl TryFrom<chrono::DateTime<Utc>> for DateTime {
     }
 }
 
+impl From<DateTime> for chrono::DateTime<Utc> {
+    fn from(date_time: DateTime) -> Self {
+        date_time.0
+    }
+}
+
 /// A `full-date` as defined in the section `7.2.1` of the [ISO/IEC 18013-5:2021][1].
 ///
 /// It is assigned a _CBOR_ tag value of `1004`.

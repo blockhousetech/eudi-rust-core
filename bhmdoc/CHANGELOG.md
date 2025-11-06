@@ -8,6 +8,14 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `bh-jws-utils` dependency updated from 0.5 to 0.6
+
+### Added
+
+- added `From<DateTime> for chrono::DateTime<Utc>`
+
 ### Added
 
 - The associated function `new` for the `ValidityInfo`.
