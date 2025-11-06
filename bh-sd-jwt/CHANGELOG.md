@@ -8,6 +8,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The `bh-jws-utils` dependency is bumped to version `0.6` (from `0.5`).
+
 ### Added
 
 - Check that `iss` value uses the `HTTPS` scheme.

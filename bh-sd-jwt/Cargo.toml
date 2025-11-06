@@ -12,7 +12,7 @@ repository = "https://github.com/blockhousetech/eudi-rust-core"
 
 [dependencies]
 base64 = "0.21.7"
-bh-jws-utils = "0.5"
+bh-jws-utils = "0.6"
 bh-status-list = "0.2"
 bh-uri-utils = "0.1"
 bherror = "0.1"
