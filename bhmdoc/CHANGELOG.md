@@ -8,10 +8,6 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
-### Changed
-
-- Updated `bh-jws-utils` dependency from 0.5 to 0.6.
-
 ### Added
 
 - The associated function `new` for the `ValidityInfo`.
@@ -28,6 +24,7 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
   for deserializing from `base64url`-encoded strings.
 - Untagged `tdate` values are no longer accepted, i.e., in order to
   deserialize `DateTime`, it needs to be tagged with `0`.
+- Updated `bh-jws-utils` dependency from 0.5 to 0.6.
 
 ## [0.3.0] - 2025-09-11
 
