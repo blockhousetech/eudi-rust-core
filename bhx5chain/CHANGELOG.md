@@ -8,6 +8,12 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.3.2] - 2025-12-10
+
+### Changed
+
+- Replace expired hardcoded certs used for testing
+
 ## [0.3.1] - 2025-11-04
 
 ### Added
