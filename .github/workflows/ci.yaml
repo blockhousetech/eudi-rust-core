@@ -132,8 +132,8 @@ jobs:
     strategy:
       matrix:
         os:
-          # MacOS on Intel architecture
-          - macos-13
+          # MacOS on Intel architecture, currently planned as the last supported image
+          - macos-15-intel
           - macos-latest
           - ubuntu-24.04-arm
           - ubuntu-latest
