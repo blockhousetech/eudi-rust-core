@@ -1,6 +1,6 @@
 [package]
 name = "bhx5chain"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["TBTL Tech <tech@tbtl.com>"]
 categories = ["cryptography"]
 description = "TBTL's library for handling X.509 certificate chains."
