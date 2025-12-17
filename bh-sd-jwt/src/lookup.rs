@@ -31,7 +31,6 @@ use bherror::{
 };
 use bhx5chain::X509Trust;
 use iref::{Uri, UriBuf};
-use openssl::x509::X509;
 use reqwest::{Client, ClientBuilder, StatusCode};
 use serde::{Deserialize, Serialize};
 
@@ -388,17 +387,9 @@ impl IssuerPublicKeyLookup for X5ChainIssuerPublicKeyLookup {
     /// Retrieve and check the Issuer public key from the x5chain field in the JWT header.
     async fn lookup(
         &self,
-        alleged_iss: &str,
+        _alleged_iss: &str,
         header: &IssuerJwtHeader,
     ) -> Result<JwkPublic, Error<Self::Err>> {
-        let Ok(alleged_iss) = alleged_iss.try_into() else {
-            return Err(Error::root(LookupError(format!(
-                "Invalid `iss` URL: {}",
-                alleged_iss
-            ))));
-        };
-        check_valid_iss(alleged_iss)?;
-
         let Some(jwt_x5chain) = &header.x5c else {
             return Err(Error::root(LookupError(
                 "missing 'x5c' jwt header".to_owned(),
@@ -416,12 +407,6 @@ impl IssuerPublicKeyLookup for X5ChainIssuerPublicKeyLookup {
             })?;
         }
 
-        if !check_certificate_and_iss_match(alleged_iss, x5chain.leaf_certificate())? {
-            return Err(Error::root(LookupError(
-                "x5chain certificate not matching the iss value".to_owned(),
-            )));
-        }
-
         let public_jwk = public_jwk_from_x5chain_leaf(&x5chain, &header.alg, header.kid.as_deref())
             .foreign_err(|| LookupError("failed to get jwk from x5chain leaf".to_owned()))?;
 
@@ -429,53 +414,16 @@ impl IssuerPublicKeyLookup for X5ChainIssuerPublicKeyLookup {
     }
 }
 
-/// Check if the iss value matches the provided certificate values.
-/// The iss has to match one of the following:
-///  * iss matches a uri san entry
-///  * iss domain name matches a dns name san entry
-///
-/// <https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-08#section-3.5-2.2.1>
-fn check_certificate_and_iss_match(iss: &Uri, cert: &X509) -> bherror::Result<bool, LookupError> {
-    let Some(san_values) = cert.subject_alt_names() else {
-        return Ok(false);
-    };
-
-    if san_values
-        .iter()
-        .filter_map(|san| san.uri())
-        .any(|uri| *iss == uri)
-    {
-        return Ok(true);
-    }
-
-    let iss_domain_name = iss.authority().ok_or_else(|| {
-        bherror::Error::root(LookupError("iss URI authority part missing".to_owned()))
-    })?;
-
-    if san_values
-        .iter()
-        .filter_map(|san| san.dnsname())
-        .any(|dns| *iss_domain_name.host() == dns)
-    {
-        return Ok(true);
-    }
-
-    Ok(false)
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
     use std::sync::Mutex;
 
     use bh_jws_utils::{jwt::claims::SecondsSinceEpoch, Es256Verifier, SigningAlgorithm};
+    use openssl::x509::X509;
     use serde_json::{json, Value};
 
     use super::*;
-    use crate::{
-        holder::{Holder, HolderError},
-        issuer::TYP_VC_SD_JWT,
-        HashingAlgorithm, Sha256, SignatureError,
-    };
+    use crate::{holder::Holder, issuer::TYP_VC_SD_JWT, HashingAlgorithm, Sha256};
 
     const HOLDER_ACCEPT_TIME: SecondsSinceEpoch = 1783000000;
 
@@ -921,10 +869,6 @@ pub(crate) mod tests {
     }
 
     /// Returns a dummy [`bhx5chain::X5Chain`] for testing purposes.
-    /// The certificate has the following SAN values
-    ///  * DNS: ["example.com"]
-    ///  * URI: ["https://www.tbtl.net"]
-    ///  * IP:  [10.0.0.1]
     fn dummy_x5chain() -> bhx5chain::X5Chain {
         let cert = "-----BEGIN CERTIFICATE-----
 MIIBqDCCAU+gAwIBAgIUa3Ph3O2ChLkG2WGly2OlOA2oB/gwCgYIKoZIzj0EAwIw
@@ -943,10 +887,6 @@ UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
     }
 
     /// Returns a dummy [`bhx5chain::JwtX5Chain`] for testing purposes.
-    /// The certificate has the following SAN values
-    ///  * DNS: ["example.com"]
-    ///  * URI: ["https://www.tbtl.net"]
-    ///  * IP:  [10.0.0.1]
     fn dummy_jwt_x5chain() -> bhx5chain::JwtX5Chain {
         dummy_x5chain().try_into().unwrap()
     }
@@ -960,10 +900,11 @@ UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
     }
 
     #[tokio::test]
-    async fn test_public_key_from_x5chain_san_dns() {
+    async fn test_public_key_from_x5chain() {
         let x5chain = dummy_x5chain();
         let jwt_x5chain = dummy_jwt_x5chain();
 
+        // NB: `iss` does not matter for `x5c`-based public key lookup anymore
         let alleged_iss = "https://example.com";
         let header = example_header_with_x5c(jwt_x5chain.clone());
 
@@ -976,44 +917,6 @@ UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
             public_jwk_from_x5chain_leaf(&x5chain, &header.alg, header.kid.as_deref()).unwrap(),
             public_jwk
         );
-    }
-
-    #[tokio::test]
-    async fn test_public_key_from_x5chain_san_uri() {
-        let x5chain = dummy_x5chain();
-        let jwt_x5chain = dummy_jwt_x5chain();
-
-        let alleged_iss = "https://www.tbtl.net";
-        let header = example_header_with_x5c(jwt_x5chain.clone());
-
-        let public_jwk = X5ChainIssuerPublicKeyLookup::trust_all()
-            .lookup(alleged_iss, &header)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            public_jwk_from_x5chain_leaf(&x5chain, &header.alg, header.kid.as_deref()).unwrap(),
-            public_jwk
-        );
-    }
-
-    #[tokio::test]
-    async fn test_public_key_from_x5chain_not_matching_iss() {
-        let jwt_x5chain = dummy_jwt_x5chain();
-        // The dummy certificate doesn't contain the full url to match the iss, also
-        // the DNS value is "example.com", not a "www.example.com".
-        let alleged_iss = "https://www.example.com";
-        let header = example_header_with_x5c(jwt_x5chain.clone());
-
-        let err = X5ChainIssuerPublicKeyLookup::trust_all()
-            .lookup(alleged_iss, &header)
-            .await
-            .unwrap_err()
-            .error;
-
-        assert!(
-            matches!(err, LookupError(msg) if msg == "x5chain certificate not matching the iss value")
-        )
     }
 
     #[tokio::test]
@@ -1072,7 +975,6 @@ UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
 
     #[tokio::test]
     async fn test_verify_issued_sd_jwt_happy_path() {
-        // matching token iss value and x5c leaf san value (dns-san = "example.com" , iss = "https://example.com/issuer")
         let issued_sd_jwt = "eyJ0eXAiOiJ2YytzZC1qd3QiLCJhbGciOiJFUzI1NiIsImtpZCI6Imlzc3VlciBraWQiLCJ4NWMiOlsiTUlJQjlEQ0NBWnFnQXdJQkFnSVVXZmFXV0FtK2kvbWRQR2luY25RQjR4NHROb013Q2dZSUtvWkl6ajBFQXdJd2F6RUxNQWtHQTFVRUJoTUNTRkl4RkRBU0JnTlZCQWdNQzBkeVlXUWdXbUZuY21WaU1ROHdEUVlEVlFRSERBWmFZV2R5WldJeERUQUxCZ05WQkFvTUJGUkNWRXd4RVRBUEJnTlZCQXNNQ0ZSbFlXMGdRbVZsTVJNd0VRWURWUVFEREFwamIyTnZiblYwTFdOaE1CNFhEVEkxTURNd05ERXpNekV4TmxvWERUTTFNRE13TWpFek16RXhObG93RWpFUU1BNEdBMVVFQXd3SFkyOWpiMjUxZERCWk1CTUdCeXFHU000OUFnRUdDQ3FHU000OUF3RUhBMElBQkREamhLOVlHc1ZvWmpxZlRYbldYTnFneCt6NlZTUkJnU3RUb1dFZ3N4R2V3UWhVMkNaYXBqK0ZwempLY1phd0RIRlovaHY5NUMxQnEwTW02U2V3RitxamRUQnpNQWtHQTFVZEV3UUNNQUF3RGdZRFZSMFBBUUgvQkFRREFnYkFNQjBHQTFVZERnUVdCQlE5Z1NxNEdxekVISTlVbTRFbitndDVYNkYxdERBZkJnTlZIU01FR0RBV2dCVFZIYjlKV25iMmR4Q2ZDME16b21tckxndEdlVEFXQmdOVkhSRUVEekFOZ2d0bGVHRnRjR3hsTG1OdmJUQUtCZ2dxaGtqT1BRUURBZ05JQURCRkFpRUE5QXhoeTRTVFJQUmNSY2w1eVRxYXp6QU1WaU0wbUhHWVg0YWUvZjJTY3FvQ0lCTkR5R3lsMTJ1Z2hpaStZdkt5VUt2dTdYVUR1cllWQjJIY0pMUTNuem5YIiwiTUlJQ09qQ0NBZUNnQXdJQkFnSVVON295UHd4cUxlMnhETUxqRHZhMEhxcUtEWHd3Q2dZSUtvWkl6ajBFQXdJd1pURUxNQWtHQTFVRUJoTUNTRkl4RkRBU0JnTlZCQWdNQzBkeVlXUWdXbUZuY21WaU1ROHdEUVlEVlFRSERBWmFZV2R5WldJeERUQUxCZ05WQkFvTUJGUkNWRXd4RVRBUEJnTlZCQXNNQ0ZSbFlXMGdRbVZsTVEwd0N3WURWUVFEREFSeWIyOTBNQ0FYRFRJME1USXhNREV5TWpRek5Wb1lEekl4TWpReE1URTJNVEl5TkRNMVdqQnJNUXN3Q1FZRFZRUUdFd0pJVWpFVU1CSUdBMVVFQ0F3TFIzSmhaQ0JhWVdkeVpXSXhEekFOQmdOVkJBY01CbHBoWjNKbFlqRU5NQXNHQTFVRUNnd0VWRUpVVERFUk1BOEdBMVVFQ3d3SVZHVmhiU0JDWldVeEV6QVJCZ05WQkFNTUNtTnZZMjl1ZFhRdFkyRXdXVEFUQmdjcWhrak9QUUlCQmdncWhrak9QUU1CQndOQ0FBUWRSR2ErMk9IaWFXYVIzK1JKNjNoR0VZV0I0aWpVdTdGcGhpSUNETjBKL2Z4QkJOOEUzVS9jdFQzZU1TcTVTeVBZTXZFbXMyS01PeER5a3ZnNkloRmdvMll3WkRBZEJnTlZIUTRFRmdRVTFSMi9TVnAyOW5jUW53dERNNkpwcXk0TFJua3dId1lEVlIwakJCZ3dGb0FVSm5iemROUERKVFd3SURCLzJsYmw3ampYazkwd0VnWURWUjBUQVFIL0JBZ3dCZ0VCL3dJQkFEQU9CZ05WSFE4QkFmOEVCQU1DQVlZd0NnWUlLb1pJemowRUF3SURTQUF3UlFJaEFOYTJ1V3VhV0wvZGZ0QkZSM3ArWldKaDdYNWpXRUFhNlZ0TXBtRWE2ZlRiQWlCNU45Nk4yckNJYjRnaUdPODZZUUJQb1dTUkE2UWovYmFiS25pQVlzSkxxUT09Il19.eyJpc3MiOiJodHRwczovL2V4YW1wbGUuY29tL2lzc3VlciIsImV4cCI6MTg4MzAwMDAwMCwiY25mIjp7Imp3ayI6eyJrdHkiOiJFQyIsImFsZyI6IkVTMjU2IiwidXNlIjoic2lnIiwiY3J2IjoiUC0yNTYiLCJ4IjoiT3d2dDhKUEpPRHFfRG9zVkRUQllsR2RGOUk1UGM0TENNOERvLVlCd0xjUSIsInkiOiIyM3V6VVlrZlh4RV95M3hybFQyM1ZCSUNyUmczOVQ3N1dHQUVvLXB5ZE1JIiwia2lkIjoiaG9sZGVyIGtpZCJ9fSwidmN0IjoiaHR0cHM6Ly9ibWkuYnVuZC5leGFtcGxlL2NyZWRlbnRpYWwvcGlkLzEuMCIsIl9zZF9hbGciOiJzaGEtMjU2IiwiaWF0IjoxNjgzMDAwMDAwLCJhZ2VfZXF1YWxfb3Jfb3ZlciI6eyJfc2QiOlsiem5VT0NOdUM1SDZJcWt1SnhJa2FIZ2JOU1NTVXhXczk4MmZFeW1iNGFtWSIsIldVb194ZUhpQTk1aE1jMHZSUXdLbThCM1Z3bHEyVUJkRHZBOTNpWDBLeDQiLCJOVXFjekZpYVdNbGtTWWNCVmNqSHNhR2Q1dTVRc3d4cWEwQjhiS0diMTZVIiwiUEhERWhucXZTQ3FvMlRITXoyS0pTLXdnYkRteWIwVHRYaUlfb0I0Y1ZwZyIsImRmbXdNTDJCdHVycDJBdmFXYmh1ME5hZ1E4eXJ2c3J1XzJpYXIzYVp5b1EiLCJaVlMtdDNHWm5ETVhJUm0yZmdWU1RaNDhlMGZ4OWxldVZvQTB5RElGcHcwIl19LCJfc2QiOlsiU1I3X0hvYi1zR216cFBlMDAtSXFSclYzUC1OeWVHaTl4d3ZTU2JnQ2RDSSIsImE3cmdNVHRSaWVvT0xYWGVGbWdnT25XSS1VQnhCUDVKVXlHTW85ZW14eUUiLCJ6MjAtckZIVmpvOXEySWtZZFZGUzdCTlpTeDJkZzRiSVRaYWdXYWk3Y1AwIiwiNWZmRXFZZUtvOENpUVh1Q0NPQWRwNno4X3c4MXdjWnp4MW94Ym1yRzZ5USIsIkJ4cUtpdG9UZjVQNDF1X1Y1OEdCcjR0Q1FhSGZjLUh1dDJWb0VENUlEVGciLCJ4NUZjVWIwYnFTZkNsWGo0b1BuUmxXMHRqemh4dkRNNk9sNGs3VWotQzc4IiwiT2g1Q3ZUbmFaRVFqSTE4Z0dRLXZKeFZXQW9wXzdwMnd0NTZtNTRydFYzNCIsImZhTTNERUFCNml5OVJyTnJjNmFXQ25tSENjZkt0aWh3RHY3MWZYUzA4ZDgiLCJfUWxnUERQSkdsY1ZpQXNlY0lYV0JheTB4bGE5MTN1X3U3R0RSWEowZEJrIiwiRVQxUmlFc2xvci1ab1dGS2hrYmpnX2dRdFprZmhQbThNTTJyT1VJLV9DWSJdfQ.yJfwSCKETHZy740Mg2Yk2qDW-rQcqmbdMfUYq8c9wvBAj_d2cssuxBiYA_Fl9tkX33J3UL9JzwdqCm3pq3pjAA~WyIwUDAwV2RhVmx3NHFuY0l3V0tiYTNRIiwgIjY1IiwgZmFsc2Vd~WyJhdGhfRkFMTDVqbEFrX3p2R2lxUGNnIiwgIjIxIiwgdHJ1ZV0~WyJOcEpwM1Q1RlR4SGR5MTk2UnBuUWh3IiwgIjE4IiwgdHJ1ZV0~WyJybW9OQ0NSSGZ3UUNxNmpfcHVpRE5nIiwgIjE2IiwgdHJ1ZV0~WyJGbTJyYkxrVlRoQTFlb2UwZFdxclpnIiwgIjE0IiwgdHJ1ZV0~WyJSbGdndGZyUTBoNHVtSmpKd1B2ekhnIiwgIjEyIiwgdHJ1ZV0~WyJBQk9yWkNIUGxXdlFDMFVQNkdISEp3IiwgImxvY2FsaXR5IiwgIkJlcmxpbiJd~WyI2bE1PME1QMVFsMG5RU2JJU2hRcVBnIiwgImNvdW50cnkiLCAiREUiXQ~WyJfWVNmbWRZZWdyR1R5aTVBc2ZjYXJBIiwgInBvc3RhbF9jb2RlIiwgIjUxMTQ3Il0~WyJvVC1rVFZMWm1aejk4Q1RvdnBsOTdBIiwgImxvY2FsaXR5IiwgIkvDtmxuIl0~WyJzdVJQRWNQdm5ha25vRldJdTdDNFp3IiwgInN0cmVldF9hZGRyZXNzIiwgIkhlaWRlc3RyYcOfZSAxNyJd~WyJVRlJSMmZ3OURia01McUQ2Q3VibGJBIiwgImFsc29fa25vd25fYXMiLCAiU2Nod2VzdGVyIEFnbmVzIl0~WyJTaWczZXJmX191aGo3WnJEcTdhM0VBIiwgInBsYWNlX29mX2JpcnRoIiwgeyJjb3VudHJ5IjoiREUiLCJfc2QiOlsib1ZZNWgxbDZpR0hpb1h0Z3NLV29UTTFtSEU5TDY3dzFqWmNuZXZYbi1hTSJdfV0~WyJyektQOXVsZWExS2M4MUhZdG5Nb1JnIiwgImJpcnRoX2ZhbWlseV9uYW1lIiwgIkdhYmxlciJd~WyJkejRoM1YyVzJGY1RmWllIMHo2aGdRIiwgImdlbmRlciIsICJmZW1hbGUiXQ~WyJNdFdkMXRHc2VYaEVhN1NscDJ0U1B3IiwgIm5hdGlvbmFsaXRpZXMiLCBbIkRFIl1d~WyJVOWNfeGVONFk3bURrZUdlM2c5UV9RIiwgImFkZHJlc3MiLCB7Il9zZCI6WyJJT0NvUGRCekljNGEzZFBRN0d5SjN3cjRSSjhVZjUtMzhPNWJaclZlbGhrIiwiNkI5WUNRc18xY25HaXNPQVJsNUVrZXRLZUxSZFpPd3MwZzM0OEdfYnRKWSIsIlVaUjVXQ0RHcU1VTG9OZElxVWlLWkptMTVfTUVZekZQTGNlLTB3c1hfR1UiLCJKdlVuRHpIM210SDVrZVhKMXBXVnFVdGplREh1YVNXdF9kU3ZXTmw4SUFrIl19XQ~WyJRWFAtalFtRFZyNlc2aWM5MENOeml3IiwgInNvdXJjZV9kb2N1bWVudF90eXBlIiwgImlkX2NhcmQiXQ~WyJDOU5vN1RNVXpOVjdFSGJXQjV1NW5RIiwgImJpcnRoZGF0ZSIsICIxOTYzLTA4LTEyIl0~WyJGUXpIN3ExczROSUVydWFEaHNmc2xnIiwgImZhbWlseV9uYW1lIiwgIk11c3Rlcm1hbm4iXQ~WyJrUEdPcHRuTkt1QkZSSEpaMXZsMGhnIiwgImdpdmVuX25hbWUiLCAiRXJpa2EiXQ~";
 
         Holder::verify_issued(
@@ -1084,28 +986,5 @@ UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
         )
         .await
         .unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_verify_issued_sd_jwt_not_matching_iss() {
-        const HOLDER_ACCEPT_TIME: SecondsSinceEpoch = 1783000000;
-        // NOT matching token iss value and x5c leaf san value (dns-san: "tbtl.com" , iss = "https://example.com/issuer")
-        let issued_sd_jwt = "eyJ0eXAiOiJ2YytzZC1qd3QiLCJhbGciOiJFUzI1NiIsImtpZCI6Imlzc3VlciBraWQiLCJ4NWMiOlsiTUlJQjhqQ0NBWmVnQXdJQkFnSVViQjF3RW8yeTlLcmxUcUg5ajk5aGZYUnlzazh3Q2dZSUtvWkl6ajBFQXdJd2F6RUxNQWtHQTFVRUJoTUNTRkl4RkRBU0JnTlZCQWdNQzBkeVlXUWdXbUZuY21WaU1ROHdEUVlEVlFRSERBWmFZV2R5WldJeERUQUxCZ05WQkFvTUJGUkNWRXd4RVRBUEJnTlZCQXNNQ0ZSbFlXMGdRbVZsTVJNd0VRWURWUVFEREFwamIyTnZiblYwTFdOaE1CNFhEVEkxTURNd05ERTBNREkwT1ZvWERUTTFNRE13TWpFME1ESTBPVm93RWpFUU1BNEdBMVVFQXd3SFkyOWpiMjUxZERCWk1CTUdCeXFHU000OUFnRUdDQ3FHU000OUF3RUhBMElBQkR6RThCOEFxWEQ2U1JYd0hrZ09NRkFseFR4QlBsbmh6YjVETjFXZS9qOWlKVW8vVjlCZjZPYmJhWEhtV3VNSEd3Nm5BTUxnYnhRcGVIMkR0UFVvRldLamNqQndNQWtHQTFVZEV3UUNNQUF3RGdZRFZSMFBBUUgvQkFRREFnYkFNQjBHQTFVZERnUVdCQlJrS29mUkRzaFBDemRCRHhwb05QWkFtQVRKcmpBZkJnTlZIU01FR0RBV2dCVFZIYjlKV25iMmR4Q2ZDME16b21tckxndEdlVEFUQmdOVkhSRUVEREFLZ2doMFluUnNMbU52YlRBS0JnZ3Foa2pPUFFRREFnTkpBREJHQWlFQXZza3ZkM0lJb0VjWlNiU0twQU43U1VTejMvU0JUYWZCU2pDK0tpVVRLdjBDSVFEMUtYRFhnQmxtSXlCQklhR2lRNmQrVHpLQUdrMWJ3d2Z3YmxKNjRzTlBtUT09IiwiTUlJQ09qQ0NBZUNnQXdJQkFnSVVON295UHd4cUxlMnhETUxqRHZhMEhxcUtEWHd3Q2dZSUtvWkl6ajBFQXdJd1pURUxNQWtHQTFVRUJoTUNTRkl4RkRBU0JnTlZCQWdNQzBkeVlXUWdXbUZuY21WaU1ROHdEUVlEVlFRSERBWmFZV2R5WldJeERUQUxCZ05WQkFvTUJGUkNWRXd4RVRBUEJnTlZCQXNNQ0ZSbFlXMGdRbVZsTVEwd0N3WURWUVFEREFSeWIyOTBNQ0FYRFRJME1USXhNREV5TWpRek5Wb1lEekl4TWpReE1URTJNVEl5TkRNMVdqQnJNUXN3Q1FZRFZRUUdFd0pJVWpFVU1CSUdBMVVFQ0F3TFIzSmhaQ0JhWVdkeVpXSXhEekFOQmdOVkJBY01CbHBoWjNKbFlqRU5NQXNHQTFVRUNnd0VWRUpVVERFUk1BOEdBMVVFQ3d3SVZHVmhiU0JDWldVeEV6QVJCZ05WQkFNTUNtTnZZMjl1ZFhRdFkyRXdXVEFUQmdjcWhrak9QUUlCQmdncWhrak9QUU1CQndOQ0FBUWRSR2ErMk9IaWFXYVIzK1JKNjNoR0VZV0I0aWpVdTdGcGhpSUNETjBKL2Z4QkJOOEUzVS9jdFQzZU1TcTVTeVBZTXZFbXMyS01PeER5a3ZnNkloRmdvMll3WkRBZEJnTlZIUTRFRmdRVTFSMi9TVnAyOW5jUW53dERNNkpwcXk0TFJua3dId1lEVlIwakJCZ3dGb0FVSm5iemROUERKVFd3SURCLzJsYmw3ampYazkwd0VnWURWUjBUQVFIL0JBZ3dCZ0VCL3dJQkFEQU9CZ05WSFE4QkFmOEVCQU1DQVlZd0NnWUlLb1pJemowRUF3SURTQUF3UlFJaEFOYTJ1V3VhV0wvZGZ0QkZSM3ArWldKaDdYNWpXRUFhNlZ0TXBtRWE2ZlRiQWlCNU45Nk4yckNJYjRnaUdPODZZUUJQb1dTUkE2UWovYmFiS25pQVlzSkxxUT09Il19.eyJpc3MiOiJodHRwczovL2V4YW1wbGUuY29tL2lzc3VlciIsImV4cCI6MTg4MzAwMDAwMCwiY25mIjp7Imp3ayI6eyJrdHkiOiJFQyIsImFsZyI6IkVTMjU2IiwidXNlIjoic2lnIiwiY3J2IjoiUC0yNTYiLCJ4IjoiRUZ2Q0UyXzU1dHlQZHN4eUpKZkc1NDIyajdYSDBKLTZVS1RzRzB1OE5xTSIsInkiOiJsX01PeE5hSHp0ZmpaMGJVQ2ZZRlBZcEZaU2xfWFpJN2ZKUHctWmtjLWNzIiwia2lkIjoiaG9sZGVyIGtpZCJ9fSwidmN0IjoiaHR0cHM6Ly9ibWkuYnVuZC5leGFtcGxlL2NyZWRlbnRpYWwvcGlkLzEuMCIsIl9zZF9hbGciOiJzaGEtMjU2IiwiaWF0IjoxNjgzMDAwMDAwLCJhZ2VfZXF1YWxfb3Jfb3ZlciI6eyJfc2QiOlsiMTJvMnZWTmFVNFdJSndqWlJXblk0dm1oekpGaFNjSE9WSVZGVDAyYmtqVSIsImszTU1STzJlMG5aMHlqcTU1OUUwZmdOcDVROG44ZmZhM3V3cWIxbDVxUDAiLCJGbGMwQ3p4MGFuY1F4dFIwaDVUTnZWTmlLcTZ0aDVUYmhQOGNmR1otTkZFIiwiZnNjTUJMajdZU0VuWnlpWWlONW12WjFkVTVSelJUTlp5M2RlYXBWVmdPdyIsIkdPMUxFRllfM1VBN1o0djZmdkVWLWJud2kyem52Slc2WmxSOWUyclBWdkkiLCJuTkl0dG5EX19FZ2g1c0dlZWxucVNwd1l1ZGtkcDZNYW9SZHVuY0RJcWtNIl19LCJfc2QiOlsiTW1VNmQ1Y09vd25aY1lLalpDYTAyM1RBY0tteEdUU09PUTJ2Wlc1OTgtRSIsImZzMXppY1l1czFhS1dfVjBDSDdieUlJMEtidmJ5M05qTVhFOTNRY2wtU28iLCIzWUNkTDczaUhoMHMyRmpXUm9wcTJRWnRmMDhSNk42cXZmZXU3S2JRVUxZIiwiTDI1aVJTNUNsdVpZTXZiWGw2MXJ5TzE1aWR3QVEyZS1qT0xJRE9Xb29WRSIsIi1zZUc2QWthTzU1Y0pIdXFPNmhlcmtEWlF6d0JyX2d6NjJldjRGS2NhdW8iLCJnMUdMWm9INFpkTGJsa3hYRVRkWmJqZU1HT3BMOTBTRzNGVGtmZHE2V0lVIiwiN0h0ZzhBUF9mS2c3Ui1ET293M0Y2ZmhzTEh2SFVha2ZCVzhFRkYyeG1BcyIsInNwUTRVRThiN1JHUTFfM2pmSEdxUTRzY20yRVdLaGlCU190LTVSVjV2WDAiLCJscTJwOUFKVUxYRGVfa1dhVG1QbWh4RUpHemdkZk5hVzY1QnZLajNoWDhRIiwiRWxrdExGOWVDMndZRFZCX3Y5WjJfRXJJTFpGdXJOdE51dXA2LTBVSXF3VSJdfQ.Pmqw-_5tSlb9Nxjr-0mELGW6jLMZFnpmse4_RLi-8t9TtZOVR7Fyyw89G4pcfdxf_gZvx3RyDpabiBjZU5kZOA~WyJNSUZvc0ZTd1hUOHZVdWpvVHpMc3BnIiwgIjY1IiwgZmFsc2Vd~WyJ6c05DdU9hMFZVUUpmWHhERkpWdHB3IiwgIjIxIiwgdHJ1ZV0~WyJkUFUxNzFGdFIyV1VITXNiOU82THh3IiwgIjE4IiwgdHJ1ZV0~WyJ4eUpDc3k0MlROcEdzYkE1Y1NpWkxRIiwgIjE2IiwgdHJ1ZV0~WyJVWU5YT0JybFVfY0ppY3RvTi1oT3pBIiwgIjE0IiwgdHJ1ZV0~WyJwT21ZZHA1TlVqUnRvVVVpa2JhOWpnIiwgIjEyIiwgdHJ1ZV0~WyJrRDdqcjdhOVBQR1VHZVlSTkJlTmR3IiwgImxvY2FsaXR5IiwgIkJlcmxpbiJd~WyJLWkJJMXhLNHVDdlhZMC1vUTFEdEhnIiwgImNvdW50cnkiLCAiREUiXQ~WyJBZEdiYUl6cU5EREF0ZnREbUtjTHRnIiwgInBvc3RhbF9jb2RlIiwgIjUxMTQ3Il0~WyJza3lLN09NbFFxZFg1WlE1TVRqZ3J3IiwgImxvY2FsaXR5IiwgIkvDtmxuIl0~WyJlQ2FnNmNMRzF5SGNrcHRLejNDR0hnIiwgInN0cmVldF9hZGRyZXNzIiwgIkhlaWRlc3RyYcOfZSAxNyJd~WyJiM2hYQ2lGUDlQLUNiU0R6R3l2Y1NnIiwgImFsc29fa25vd25fYXMiLCAiU2Nod2VzdGVyIEFnbmVzIl0~WyJqM1J4QXYtLVJ2ckxEWU1wdHNBX3dBIiwgInBsYWNlX29mX2JpcnRoIiwgeyJjb3VudHJ5IjoiREUiLCJfc2QiOlsiZFpEUGdkU0Q3b3dVRzI3dm50eS00dHpPNXRuTHdtN0lEZTNrbWplc01LVSJdfV0~WyJWcGgyV241WVlvQlAzVUlyc3VONFZBIiwgImJpcnRoX2ZhbWlseV9uYW1lIiwgIkdhYmxlciJd~WyJydVhYbmZfRDg1OWI1R0FMdW5oRmFRIiwgImdlbmRlciIsICJmZW1hbGUiXQ~WyJSTVJ2TzhwUU9aS1RjMVZIdXQ2aHV3IiwgIm5hdGlvbmFsaXRpZXMiLCBbIkRFIl1d~WyJCbHNRd3lPWHAwYjlyRllseXU3bWR3IiwgImFkZHJlc3MiLCB7Il9zZCI6WyJlbl9vamNSUFpmS3NXYk9DN0xyTkREbTUtQTViTXhnMkpyQkY1SU9KWnEwIiwicFhaU04xbGVNa3N3eXJrYU9KTjBwWVFNQkZ0NG1xWXpnZ1prZEVGVE1TRSIsImhUVWxGZUU2d3U3RUdtOWlVWGVrQ3lvMlNFdGl3T01qSkkyT2lKUGViN0kiLCJVbHJnc3had1NDcjhaSUtFQUp3UUNlMnBySG1XTTExV25Ta3BNbmgtX0VnIl19XQ~WyJudmZEdzlMVnRKRHFsVEZPdGdEY0JnIiwgInNvdXJjZV9kb2N1bWVudF90eXBlIiwgImlkX2NhcmQiXQ~WyJ4cDlUdW9ybXZ1TDZKR2R6dEhaTXVBIiwgImJpcnRoZGF0ZSIsICIxOTYzLTA4LTEyIl0~WyItYVhObEhjUUN5QnUxTWNrbFU5TGZnIiwgImZhbWlseV9uYW1lIiwgIk11c3Rlcm1hbm4iXQ~WyJjR2pndVlHME1NOFFvNUF3RkxLLUlnIiwgImdpdmVuX25hbWUiLCAiRXJpa2EiXQ~";
-
-        let Err(err) = Holder::verify_issued(
-            issued_sd_jwt,
-            &X5ChainIssuerPublicKeyLookup::trust_all(),
-            |alg| (alg == HashingAlgorithm::Sha256).then_some(Box::new(Sha256)),
-            |alg| (alg == SigningAlgorithm::Es256).then_some(&Es256Verifier),
-            HOLDER_ACCEPT_TIME,
-        )
-        .await
-        else {
-            panic!("verification must fail")
-        };
-
-        assert!(
-            matches!(err.error, HolderError::Signature(signature_err) if matches!(signature_err, SignatureError::PublicKeyLookupFailed))
-        );
     }
 }

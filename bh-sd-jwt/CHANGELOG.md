@@ -8,6 +8,13 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Removed the check in `X5ChainIssuerPublicKeyLookup::lookup` that the `iss`
+  value is a valid HTTPS URL and that it corresponds to a URI/DNS SAN in the leaf
+  certificate of the `x5c` header field. This is because this requirement was
+  removed as of draft 10 of the SD-JWT VC standard.
+
 ## [0.4.0] - 2025-11-10
 
 ### Changed
