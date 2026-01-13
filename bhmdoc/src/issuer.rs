@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn test_issue() {
         let mut rng = thread_rng();
-        let issuer_signer = crate::utils::test::SimpleSigner::issuer();
+        let issuer_signer = crate::utils::test::issuer_signer();
         let (_, device_key) = crate::utils::test::dummy_device_key();
 
         let claims = Claims(HashMap::from([(
@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn test_issue_mdl() {
         let mut rng = thread_rng();
-        let issuer_signer = crate::utils::test::SimpleSigner::issuer();
+        let issuer_signer = crate::utils::test::issuer_signer();
         let (_, device_key) = crate::utils::test::dummy_device_key();
 
         let mdl_mandatory = MDLMandatory {

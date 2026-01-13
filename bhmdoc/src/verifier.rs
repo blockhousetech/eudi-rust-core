@@ -134,12 +134,12 @@ impl Verifier {
 mod tests {
     use std::collections::HashMap;
 
-    use bh_jws_utils::{Es256Verifier, HasX5Chain as _};
+    use bh_jws_utils::Es256Verifier;
 
     use super::*;
     use crate::{
         models::mdl::MDL_NAMESPACE,
-        utils::test::{present_dummy_mdoc, SimpleSigner},
+        utils::test::{issuer_x509_trust, present_dummy_mdoc},
     };
 
     #[test]
@@ -157,12 +157,7 @@ mod tests {
             HashMap::from([("lastName".into(), "Doe".into())]),
         )]))];
 
-        let x5chain = SimpleSigner::issuer().x5chain();
-
-        // for simplicity, the root is just the leaf certificate
-        let root = x5chain.leaf_certificate().to_owned();
-
-        let trust = X509Trust::new(vec![root]);
+        let trust = issuer_x509_trust();
 
         let claims = verifier
             .verify(

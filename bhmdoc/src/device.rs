@@ -234,7 +234,7 @@ mod tests {
             data_retrieval::device_retrieval::request::DocRequest,
             mdl::{MDL_DOCUMENT_TYPE, MDL_NAMESPACE},
         },
-        utils::test::{issue_dummy_mdoc, issue_dummy_mdoc_to_device, SimpleSigner},
+        utils::test::{device_signer, issue_dummy_mdoc, issue_dummy_mdoc_to_device, issuer_signer},
         MdocError, Verifier,
     };
 
@@ -339,7 +339,7 @@ mod tests {
                 "response_uri",
                 "nonce",
                 "mdoc_generated_nonce",
-                &SimpleSigner::device(),
+                &device_signer(),
             )
             .unwrap();
 
@@ -374,7 +374,7 @@ mod tests {
                 "response_uri",
                 "nonce",
                 "mdoc_generated_nonce",
-                &SimpleSigner::device(),
+                &device_signer(),
             )
             .unwrap();
 
@@ -403,7 +403,7 @@ mod tests {
                 "response_uri",
                 "nonce",
                 "mdoc_generated_nonce",
-                &SimpleSigner::device(),
+                &device_signer(),
             )
             .unwrap();
 
@@ -439,7 +439,7 @@ mod tests {
                 "response_uri",
                 "nonce",
                 "mdoc_generated_nonce",
-                &SimpleSigner::device(),
+                &device_signer(),
             )
             .unwrap();
 
@@ -475,7 +475,7 @@ mod tests {
                 "response_uri",
                 "nonce",
                 "mdoc_generated_nonce",
-                &SimpleSigner::device(),
+                &device_signer(),
             )
             .unwrap();
 
@@ -505,7 +505,7 @@ mod tests {
                 "response_uri",
                 "nonce",
                 "mdoc_generated_nonce",
-                &SimpleSigner::device(),
+                &device_signer(),
             )
             .unwrap_err();
 
@@ -527,7 +527,7 @@ mod tests {
                 "response_uri",
                 "nonce",
                 "mdoc_generated_nonce",
-                &SimpleSigner::device(),
+                &device_signer(),
             )
             .unwrap_err();
 
@@ -559,7 +559,7 @@ mod tests {
                 "response_uri",
                 "nonce",
                 "mdoc_generated_nonce",
-                &SimpleSigner::device(),
+                &device_signer(),
             )
             .unwrap();
 
@@ -592,7 +592,7 @@ mod tests {
                 "response_uri",
                 "nonce",
                 "mdoc_generated_nonce",
-                &SimpleSigner::device(), // use the correct signer
+                &device_signer(), // use the correct signer
             )
             .unwrap();
 
@@ -605,7 +605,7 @@ mod tests {
                 "response_uri",
                 "nonce",
                 "mdoc_generated_nonce",
-                &SimpleSigner::issuer(), // use the wrong signer
+                &issuer_signer(), // use the wrong signer
             )
             .unwrap_err();
         assert_matches!(

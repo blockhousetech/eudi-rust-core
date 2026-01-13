@@ -15,11 +15,8 @@
 
 use std::collections::HashMap;
 
-use bh_jws_utils::{
-    openssl_ec_pub_key_to_jwk, Es256Verifier, HasX5Chain, JwkPublic, Signer, SigningAlgorithm,
-};
-use bhx5chain::X5Chain;
-use openssl::{ec::EcKey, ecdsa::EcdsaSig, pkey::Private, x509::X509};
+use bh_jws_utils::{Es256Signer, Es256SignerWithChain, Es256Verifier};
+use bhx5chain::{X509Trust, X5Chain};
 use rand::thread_rng;
 
 use crate::{
@@ -35,90 +32,56 @@ use crate::{
     Device, DeviceKey, Issuer,
 };
 
-pub(crate) struct SimpleSigner {
-    key: EcKey<Private>,
-    cert: Option<X509>,
-}
-
-// Good enough implementation of signer that should provide valid issuer's and device's signatures.
-impl SimpleSigner {
-    pub fn issuer() -> Self {
-        let key = "-----BEGIN EC PRIVATE KEY-----\n\
-MHcCAQEEILgeXnSEs6kMtkw60nBVEXIc3m/nF5LjPEIwUC4cEhpZoAoGCCqGSM49\
-AwEHoUQDQgAEWpR+rzdovqY4i6fxZE8/lPrWQTPBGt0kfpbHqsTII0PUJQ85NIJ5\
-mMBCA0MB6BcdQNThclRs93GJ7oVDiBnOxw==\n\
+const ISSUER_KEY: &str = "-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEILgeXnSEs6kMtkw60nBVEXIc3m/nF5LjPEIwUC4cEhpZoAoGCCqGSM49
+AwEHoUQDQgAEWpR+rzdovqY4i6fxZE8/lPrWQTPBGt0kfpbHqsTII0PUJQ85NIJ5
+mMBCA0MB6BcdQNThclRs93GJ7oVDiBnOxw==
 -----END EC PRIVATE KEY-----";
 
-        let cert = "-----BEGIN CERTIFICATE-----\n\
-MIICtTCCAlugAwIBAgIUIAe5tLOxpf5iboVrcw/QIyBU6jYwCgYIKoZIzj0EAwIw\
-ZTELMAkGA1UEBhMCSFIxFDASBgNVBAgMC0dyYWQgWmFncmViMQ8wDQYDVQQHDAZa\
-YWdyZWIxDTALBgNVBAoMBFRCVEwxETAPBgNVBAsMCFRlYW0gQmVlMQ0wCwYDVQQD\
-DARyb290MB4XDTI0MTIzMTA4MjMzOVoXDTI1MTIzMTA4MjMzOVowZTELMAkGA1UE\
-BhMCSFIxFDASBgNVBAgMC0dyYWQgWmFncmViMQ8wDQYDVQQHDAZaYWdyZWIxDTAL\
-BgNVBAoMBFRCVEwxETAPBgNVBAsMCFRlYW0gQmVlMQ0wCwYDVQQDDARyb290MFkw\
-EwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWpR+rzdovqY4i6fxZE8/lPrWQTPBGt0k\
-fpbHqsTII0PUJQ85NIJ5mMBCA0MB6BcdQNThclRs93GJ7oVDiBnOx6OB6DCB5TAP\
-BgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBTRdwhNw27J4czlNtsNN43+tp2eNTCB\
-ogYDVR0jBIGaMIGXgBTRdwhNw27J4czlNtsNN43+tp2eNaFppGcwZTELMAkGA1UE\
-BhMCSFIxFDASBgNVBAgMC0dyYWQgWmFncmViMQ8wDQYDVQQHDAZaYWdyZWIxDTAL\
-BgNVBAoMBFRCVEwxETAPBgNVBAsMCFRlYW0gQmVlMQ0wCwYDVQQDDARyb290ghQg\
-B7m0s7Gl/mJuhWtzD9AjIFTqNjAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwID\
-SAAwRQIhAK87AC9NmIAhLdXjs8d3q46oJZyNDlhb6siMILKj0XfoAiApoMI8iZBj\
-o/pWdBX48fIKg7CDcsHq3cRO2XZlkwE8rQ==\n\
+const ISSUER_SELF_SIGNED_CERT: &str = "-----BEGIN CERTIFICATE-----
+MIIBuDCCAV6gAwIBAgIULXEdVlwLjqTzYdqJ/ttQvP1ZY7wwCgYIKoZIzj0EAwIw
+ETEPMA0GA1UEAwwGaXNzdWVyMCAXDTI2MDExMzA5NDMzM1oYDzIxMjUxMjIwMDk0
+MzMzWjARMQ8wDQYDVQQDDAZpc3N1ZXIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNC
+AARalH6vN2i+pjiLp/FkTz+U+tZBM8Ea3SR+lseqxMgjQ9QlDzk0gnmYwEIDQwHo
+Fx1A1OFyVGz3cYnuhUOIGc7Ho4GRMIGOMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0O
+BBYEFNF3CE3DbsnhzOU22w03jf62nZ41MEwGA1UdIwRFMEOAFNF3CE3DbsnhzOU2
+2w03jf62nZ41oRWkEzARMQ8wDQYDVQQDDAZpc3N1ZXKCFC1xHVZcC46k82Haif7b
+ULz9WWO8MA4GA1UdDwEB/wQEAwIBBjAKBggqhkjOPQQDAgNIADBFAiEAsiqBfmRt
+qlTziovu+5yvNScpH4iyXbV/NzDSrbSZKa0CIE3vMvlhWbNIcWYKqy3yhEtzoLEu
+7bAw0TM3HO5G5/S7
 -----END CERTIFICATE-----";
 
-        let cert = openssl::x509::X509::from_pem(cert.as_bytes()).unwrap();
+/// Tests assume each call returns the same certificate.
+pub fn issuer_signer() -> Es256SignerWithChain {
+    let signer = Es256Signer::from_private_key_pem("".into(), ISSUER_KEY).unwrap();
 
-        Self {
-            key: EcKey::private_key_from_pem(key.as_bytes()).unwrap(),
-            cert: Some(cert),
-        }
-    }
+    // NB: abuses the (documented) fact that this does not validate certificates
+    // to import a root certificate as a leaf, even though the struct is not
+    // meant to contain self-signed certs
+    let x5chain = X5Chain::from_pem(&[ISSUER_SELF_SIGNED_CERT]).unwrap();
 
-    pub fn device() -> Self {
-        let key = "-----BEGIN EC PRIVATE KEY-----\n\
-MHcCAQEEILjSIcrmsTJCekmHPvgO+DAFUwQKejDs8ajG0x2ze/WToAoGCCqGSM49\
-AwEHoUQDQgAEY+7+D1tppcAeeumcKCydGrJizZJTHIK1bpZWVO6q0ywjuuJozvRS\
-CVBBTs23XV01ROn8DbkFeLlejoWr/G584w==\n\
------END EC PRIVATE KEY-----
-        )";
-
-        Self {
-            key: EcKey::private_key_from_pem(key.as_bytes()).unwrap(),
-            cert: None,
-        }
-    }
+    Es256SignerWithChain::new(signer, x5chain).unwrap()
 }
 
-impl Signer for SimpleSigner {
-    fn algorithm(&self) -> SigningAlgorithm {
-        SigningAlgorithm::Es256
-    }
-
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-        let digest = crate::utils::digest::sha256(message);
-        let signature = EcdsaSig::sign(&digest, self.key.as_ref()).unwrap();
-
-        let mut ser_sig = signature.r().to_vec_padded(32).unwrap();
-        ser_sig.extend(signature.s().to_vec_padded(32).unwrap());
-
-        Ok(ser_sig)
-    }
-
-    fn public_jwk(&self) -> Result<JwkPublic, Box<dyn std::error::Error + Send + Sync>> {
-        let pkey = EcKey::from_public_key(self.key.group(), self.key.public_key()).unwrap();
-        Ok(openssl_ec_pub_key_to_jwk(&pkey, None).unwrap())
-    }
+/// Tests assume each call returns the same certificate.
+pub fn issuer_x509_trust() -> X509Trust {
+    let cert = openssl::x509::X509::from_pem(ISSUER_SELF_SIGNED_CERT.as_bytes()).unwrap();
+    X509Trust::new(vec![cert])
 }
 
-impl HasX5Chain for SimpleSigner {
-    fn x5chain(&self) -> X5Chain {
-        X5Chain::new(vec![self.cert.clone().unwrap()]).unwrap()
-    }
+/// Tests assume each call returns the same key.
+pub fn device_signer() -> Es256Signer {
+    const DEVICE_KEY: &str = "-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEILjSIcrmsTJCekmHPvgO+DAFUwQKejDs8ajG0x2ze/WToAoGCCqGSM49
+AwEHoUQDQgAEY+7+D1tppcAeeumcKCydGrJizZJTHIK1bpZWVO6q0ywjuuJozvRS
+CVBBTs23XV01ROn8DbkFeLlejoWr/G584w==
+-----END EC PRIVATE KEY-----";
+
+    Es256Signer::from_private_key_pem("".into(), DEVICE_KEY).unwrap()
 }
 
-pub(crate) fn dummy_device_key() -> (SimpleSigner, DeviceKey) {
-    let signer = SimpleSigner::device();
+pub(crate) fn dummy_device_key() -> (Es256Signer, DeviceKey) {
+    let signer = device_signer();
     let device_key = DeviceKey::from_jwk(&signer.public_jwk().unwrap()).unwrap();
 
     (signer, device_key)
@@ -126,7 +89,7 @@ pub(crate) fn dummy_device_key() -> (SimpleSigner, DeviceKey) {
 
 pub(crate) fn issue_dummy_mdoc(current_time: u64) -> IssuedDocument {
     let mut rng = thread_rng();
-    let issuer_signer = SimpleSigner::issuer();
+    let issuer_signer = issuer_signer();
     let (_, device_key) = dummy_device_key();
 
     let claims = Claims(HashMap::from([(
@@ -180,7 +143,7 @@ pub(crate) fn present_dummy_mdoc(current_time: u64) -> DeviceResponse {
             "response_uri",
             "nonce",
             "mdoc_generated_nonce",
-            &SimpleSigner::device(),
+            &device_signer(),
         )
         .unwrap()
 }
