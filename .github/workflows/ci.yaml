@@ -57,7 +57,7 @@ jobs:
         with:
           ref: ${{ env.GIT_CHECKOUT_REF }}
 
-      - uses: EmbarkStudios/cargo-deny-action@34899fc7ba81ca6268d5947a7a16b4649013fea1
+      - uses: EmbarkStudios/cargo-deny-action@v2.0.15
         with:
           command: check advisories bans licenses sources
           manifest-path: ${{ env.CARGO_ENABLE_WHOLE_WORKSPACE == 'false' && format('./{0}/Cargo.toml', inputs.crate) || './Cargo.toml' }}

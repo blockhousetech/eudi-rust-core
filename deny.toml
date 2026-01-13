@@ -20,13 +20,13 @@ allow = [
 
 exceptions = [
     # We publish our crates under AGPLv3
-    { crate = "bh-jws-utils", allow = ["AGPL-3.0"] },
-    { crate = "bh-sd-jwt", allow = ["AGPL-3.0"] },
-    { crate = "bh-status-list", allow = ["AGPL-3.0"] },
-    { crate = "bh-uri-utils", allow = ["AGPL-3.0"] },
-    { crate = "bherror", allow = ["AGPL-3.0"] },
-    { crate = "bhmdoc", allow = ["AGPL-3.0"] },
-    { crate = "bhx5chain", allow = ["AGPL-3.0"] },
+    { crate = "bh-jws-utils", allow = ["AGPL-3.0-or-later"] },
+    { crate = "bh-sd-jwt", allow = ["AGPL-3.0-or-later"] },
+    { crate = "bh-status-list", allow = ["AGPL-3.0-or-later"] },
+    { crate = "bh-uri-utils", allow = ["AGPL-3.0-or-later"] },
+    { crate = "bherror", allow = ["AGPL-3.0-or-later"] },
+    { crate = "bhmdoc", allow = ["AGPL-3.0-or-later"] },
+    { crate = "bhx5chain", allow = ["AGPL-3.0-or-later"] },
 ]
 
 [advisories]
