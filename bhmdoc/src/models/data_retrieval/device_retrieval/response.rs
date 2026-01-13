@@ -774,7 +774,7 @@ mod tests {
             .into(),
         );
 
-        let issuer_signer = crate::utils::test::SimpleSigner::issuer();
+        let issuer_signer = crate::utils::test::issuer_signer();
         let (device_signer, device_key) = crate::utils::test::dummy_device_key();
 
         let issuer_auth = IssuerAuth::new(

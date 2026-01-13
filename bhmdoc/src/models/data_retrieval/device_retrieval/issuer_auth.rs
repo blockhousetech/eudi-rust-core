@@ -782,7 +782,7 @@ mod tests {
         models::{
             data_retrieval::device_retrieval::response::IssuerSignedItem, mdl::MDL_NAMESPACE,
         },
-        utils::test::{validity_info, SimpleSigner},
+        utils::test::{issuer_signer, issuer_x509_trust, validity_info},
     };
 
     fn dummy_issuer_auth(current_time: u64) -> IssuerAuth {
@@ -816,7 +816,7 @@ mod tests {
             .into(),
         );
 
-        let issuer_signer = SimpleSigner::issuer();
+        let issuer_signer = issuer_signer();
         let (_, device_key) = crate::utils::test::dummy_device_key();
 
         IssuerAuth::new(
@@ -1024,13 +1024,10 @@ eb0733d667005f7467cec4b87b9381a6ba1ede8e00df29f32a37230f39a842a54821fdd223092819
     fn issuer_auth_x5chain_trust() {
         let issuer_auth = dummy_issuer_auth(100);
 
-        let expected_x5chain = SimpleSigner::issuer().x5chain();
-
-        // for simplicity, the root is just the leaf certificate
-        let root = expected_x5chain.leaf_certificate().to_owned();
+        let expected_x5chain = issuer_signer().x5chain();
 
         // Issuer authenticity verified
-        let trust = X509Trust::new(vec![root]);
+        let trust = issuer_x509_trust();
         let x5chain = issuer_auth.x5chain(Some(&trust)).unwrap();
         assert_eq!(expected_x5chain, x5chain);
 
