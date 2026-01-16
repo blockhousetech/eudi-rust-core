@@ -16,6 +16,7 @@
 //! This module provides the [`Verifier`] type which is used to verify issued `mDoc` Credentials.
 
 use bh_jws_utils::{SignatureVerifier, SigningAlgorithm};
+use bh_status_list::StatusClaim;
 use bhx5chain::X509Trust;
 use rand::Rng;
 
@@ -33,6 +34,18 @@ pub struct Verifier {
     client_id: String,
     response_uri: String,
     nonce: String,
+}
+
+/// Claims as verified by the [`Verifier`].
+#[derive(Debug, PartialEq)]
+#[non_exhaustive]
+pub struct VerifiedClaims {
+    /// The actual claims of the credential.
+    pub claims: Claims,
+
+    /// The pointer to the status of the credential within the corresponding
+    /// status list.
+    pub status: Option<StatusClaim>,
 }
 
 impl Verifier {
@@ -83,7 +96,7 @@ impl Verifier {
         mdoc_generated_nonce: &str,
         trust: Option<&X509Trust>,
         get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
-    ) -> Result<Vec<Claims>> {
+    ) -> Result<Vec<VerifiedClaims>> {
         device_response
             .into_documents()
             .ok_or_else(|| bherror::Error::root(MdocError::EmptyDeviceResponse))?
@@ -114,7 +127,7 @@ impl Verifier {
         trust: Option<&X509Trust>,
         get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
         current_time: u64,
-    ) -> Result<Claims> {
+    ) -> Result<VerifiedClaims> {
         document.verify(
             &self.client_id,
             &self.response_uri,
@@ -126,7 +139,10 @@ impl Verifier {
 
         document.validate(current_time)?;
 
-        Ok(document.into_claims())
+        Ok(VerifiedClaims {
+            status: document.status()?,
+            claims: document.into_claims(),
+        })
     }
 }
 
@@ -150,12 +166,15 @@ mod tests {
             "nonce".to_owned(),
         );
 
-        let device_response = present_dummy_mdoc(100);
+        let device_response = present_dummy_mdoc(100, None);
 
-        let expected_claims = vec![Claims(HashMap::from([(
-            MDL_NAMESPACE.into(),
-            HashMap::from([("lastName".into(), "Doe".into())]),
-        )]))];
+        let expected_claims = vec![VerifiedClaims {
+            claims: Claims(HashMap::from([(
+                MDL_NAMESPACE.into(),
+                HashMap::from([("lastName".into(), "Doe".into())]),
+            )])),
+            status: None,
+        }];
 
         let trust = issuer_x509_trust();
 
@@ -180,7 +199,7 @@ mod tests {
             "nonce".to_owned(),
         );
 
-        let device_response = present_dummy_mdoc(100);
+        let device_response = present_dummy_mdoc(100, None);
 
         // no Issuer is trusted (empty `trust`)
         let trust = X509Trust::new(vec![]);
@@ -206,12 +225,52 @@ mod tests {
             "nonce".to_owned(),
         );
 
-        let device_response = present_dummy_mdoc(100);
+        let device_response = present_dummy_mdoc(100, None);
 
-        let expected_claims = vec![Claims(HashMap::from([(
-            MDL_NAMESPACE.into(),
-            HashMap::from([("lastName".into(), "Doe".into())]),
-        )]))];
+        let expected_claims = vec![VerifiedClaims {
+            claims: Claims(HashMap::from([(
+                MDL_NAMESPACE.into(),
+                HashMap::from([("lastName".into(), "Doe".into())]),
+            )])),
+            status: None,
+        }];
+
+        // every Issuer is trusted (`trust` not provided)
+        let claims = verifier
+            .verify(device_response, 105, "mdoc_generated_nonce", None, |_| {
+                Some(&Es256Verifier)
+            })
+            .unwrap();
+
+        assert_eq!(expected_claims, claims);
+    }
+
+    #[test]
+    fn test_verify_successful_with_status() {
+        let verifier = Verifier::from_parts(
+            "client_id".to_owned(),
+            "response_uri".to_owned(),
+            "nonce".to_owned(),
+        );
+
+        let device_response = present_dummy_mdoc(
+            100,
+            Some(StatusClaim::new(
+                "https://example.com/status-list".parse().unwrap(),
+                74,
+            )),
+        );
+
+        let expected_claims = vec![VerifiedClaims {
+            claims: Claims(HashMap::from([(
+                MDL_NAMESPACE.into(),
+                HashMap::from([("lastName".into(), "Doe".into())]),
+            )])),
+            status: Some(StatusClaim::new(
+                "https://example.com/status-list".parse().unwrap(),
+                74,
+            )),
+        }];
 
         // every Issuer is trusted (`trust` not provided)
         let claims = verifier

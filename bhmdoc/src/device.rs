@@ -16,6 +16,7 @@
 //! This module defines a [`Device`] type that works with an issued Credential.
 
 use bh_jws_utils::{SignatureVerifier, SigningAlgorithm};
+use bh_status_list::StatusClaim;
 use bherror::traits::ForeignBoxed as _;
 
 use crate::{
@@ -199,6 +200,15 @@ impl Device {
         self.issuer_signed.issuer_auth.validity_info()
     }
 
+    /// Get the pointer to the credential's status.
+    ///
+    /// For more information, take a look at the [Token Status List (TSL)][1].
+    ///
+    /// [1]: <https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-15.html>
+    pub fn status(&self) -> Result<Option<StatusClaim>> {
+        self.issuer_signed.status()
+    }
+
     /// Verify that the [`DeviceKey`] signed by the `mdoc` Issuer matches the
     /// one from the provided `signer`.
     fn check_device_key(&self, signer: &impl bh_jws_utils::Signer) -> Result<()> {
@@ -240,7 +250,7 @@ mod tests {
 
     #[test]
     fn test_verify_issued_success() {
-        let issued = issue_dummy_mdoc(100);
+        let issued = issue_dummy_mdoc(100, None);
 
         let device = Device::verify_issued(
             &issued.serialize_issuer_signed().unwrap(),
@@ -274,7 +284,7 @@ mod tests {
 
     #[test]
     fn test_verify_issued_expired_fails() {
-        let issued = issue_dummy_mdoc(100);
+        let issued = issue_dummy_mdoc(100, None);
 
         let err = Device::verify_issued(
             &issued.serialize_issuer_signed().unwrap(),
@@ -289,7 +299,7 @@ mod tests {
 
     #[test]
     fn test_verify_issued_not_yet_valid_success() {
-        let issued = issue_dummy_mdoc(100);
+        let issued = issue_dummy_mdoc(100, None);
 
         let _device = Device::verify_issued(
             &issued.serialize_issuer_signed().unwrap(),
@@ -302,7 +312,7 @@ mod tests {
 
     #[test]
     fn test_verify_issued_invalid_doc_type_fails() {
-        let issued = issue_dummy_mdoc(100);
+        let issued = issue_dummy_mdoc(100, None);
 
         let err = Device::verify_issued(
             &issued.serialize_issuer_signed().unwrap(),
@@ -321,7 +331,7 @@ mod tests {
 
     #[test]
     fn test_present_successful() {
-        let device = issue_dummy_mdoc_to_device(100);
+        let device = issue_dummy_mdoc_to_device(100, None);
 
         let doc_request = DocRequest::builder(MDL_DOCUMENT_TYPE.into())
             .add_name_space(
@@ -361,7 +371,7 @@ mod tests {
 
     #[test]
     fn test_present_no_target_documents_successful() {
-        let device = issue_dummy_mdoc_to_device(100);
+        let device = issue_dummy_mdoc_to_device(100, None);
 
         // no document is requested
         let request = DeviceRequest::new(Vec::new());
@@ -384,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_present_no_matching_documents_successful() {
-        let device = issue_dummy_mdoc_to_device(100);
+        let device = issue_dummy_mdoc_to_device(100, None);
 
         // the requested document does not exist
         let doc_request = DocRequest::builder("NON-EXISTENT DOCUMENT".into())
@@ -413,7 +423,7 @@ mod tests {
 
     #[test]
     fn test_present_non_existent_claims_successful() {
-        let device = issue_dummy_mdoc_to_device(100);
+        let device = issue_dummy_mdoc_to_device(100, None);
 
         // non-existent name spaces and claims are ignored
         let doc_request = DocRequest::builder(MDL_DOCUMENT_TYPE.into())
@@ -461,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_present_no_matching_claims_successful() {
-        let device = issue_dummy_mdoc_to_device(100);
+        let device = issue_dummy_mdoc_to_device(100, None);
 
         // no claims are requested, and consequently matched
         let doc_request = DocRequest::builder(MDL_DOCUMENT_TYPE.into()).build();
@@ -492,7 +502,7 @@ mod tests {
 
     #[test]
     fn test_present_expired_credential_fails() {
-        let device = issue_dummy_mdoc_to_device(100);
+        let device = issue_dummy_mdoc_to_device(100, None);
 
         let doc_request = DocRequest::builder(MDL_DOCUMENT_TYPE.into()).build();
         let request = DeviceRequest::new(vec![doc_request]);
@@ -514,7 +524,7 @@ mod tests {
 
     #[test]
     fn test_present_not_yet_valid_credential_fails() {
-        let device = issue_dummy_mdoc_to_device(100);
+        let device = issue_dummy_mdoc_to_device(100, None);
 
         let doc_request = DocRequest::builder(MDL_DOCUMENT_TYPE.into()).build();
         let request = DeviceRequest::new(vec![doc_request]);
@@ -536,7 +546,7 @@ mod tests {
 
     #[test]
     fn test_presentation_verifies_successfully() {
-        let device = issue_dummy_mdoc_to_device(100);
+        let device = issue_dummy_mdoc_to_device(100, None);
         let verifier = Verifier::from_parts(
             "client_id".to_owned(),
             "response_uri".to_owned(),
@@ -569,7 +579,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(1, claims.len());
-        let claims = claims.into_iter().next().unwrap().0;
+        let claims = claims.into_iter().next().unwrap().claims.0;
 
         let expected_claims = HashMap::from([(
             MDL_NAMESPACE.into(),
@@ -581,7 +591,7 @@ mod tests {
 
     #[test]
     fn test_present_check_device_key() {
-        let device = issue_dummy_mdoc_to_device(100);
+        let device = issue_dummy_mdoc_to_device(100, None);
 
         // the signer is correct
         let _device_response = device

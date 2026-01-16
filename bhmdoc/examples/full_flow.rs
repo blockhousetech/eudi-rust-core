@@ -16,6 +16,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use bh_jws_utils::{Es256Signer, Es256Verifier, SignerWithChain};
+use bh_status_list::{StatusClaim, UriBuf};
 use bhmdoc::{
     generate_nonce,
     models::{
@@ -94,6 +95,10 @@ fn main() {
     // epoch.
     let current_time = 100;
 
+    // Set the pointer to the credential's status.
+    let status_list_uri: UriBuf = "https://issuer.com/status-list".parse().unwrap();
+    let status_list_idx = 532;
+
     // We issue the document using the Issuer.
     let issued_document = Issuer
         .issue_mdl(
@@ -109,6 +114,8 @@ fn main() {
                 None,
             )
             .unwrap(),
+            // set to None if status list should not be used
+            Some(StatusClaim::new(status_list_uri.clone(), status_list_idx)),
         )
         .unwrap();
 
@@ -179,7 +186,7 @@ fn main() {
     let current_time = current_time + 10;
 
     // Verify the device response and extract the claims.
-    let claims = verifier
+    let verified_claims = verifier
         .verify(
             device_response,
             current_time,
@@ -192,10 +199,16 @@ fn main() {
 
     // We are verifying only one document so we expect the claims vector to
     // contain only one element.
-    assert_eq!(claims.len(), 1);
+    assert_eq!(verified_claims.len(), 1);
+
+    // Get the claims of that one document.
+    let claims = &verified_claims[0].claims.0;
+
+    // Get the status pointer of that one document.
+    let credential_status_pointer = &verified_claims[0].status;
 
     // We get the claims for the mDL namespace.
-    let mdl_namespace_claims = claims[0].0.get(&MDL_NAMESPACE.into()).unwrap();
+    let mdl_namespace_claims = claims.get(&MDL_NAMESPACE.into()).unwrap();
 
     // Assert that there are exactly 3 claims in the mDL namespace.
     assert_eq!(mdl_namespace_claims.len(), 3);
@@ -205,6 +218,12 @@ fn main() {
     assert!(mdl_namespace_claims.contains_key(&"given_name".into()));
     assert!(mdl_namespace_claims.contains_key(&"expiry_date".into()));
 
+    // Assert that the status pointer is as the issuer set it.
+    assert_eq!(
+        credential_status_pointer,
+        &Some(StatusClaim::new(status_list_uri, status_list_idx))
+    );
+
     // Print the claims.
-    println!("Claim: {:?}", claims[0].0);
+    println!("Claim: {:?}", claims);
 }
