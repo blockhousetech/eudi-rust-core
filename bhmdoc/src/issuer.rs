@@ -20,6 +20,7 @@
 
 use std::collections::HashMap;
 
+use bh_status_list::StatusClaim;
 use rand::Rng;
 
 use crate::{
@@ -50,6 +51,7 @@ pub struct Issuer;
 
 impl Issuer {
     /// Issue a new `mso_mdoc` Credential.
+    #[allow(clippy::too_many_arguments)]
     pub fn issue<Signer: bh_jws_utils::Signer + bh_jws_utils::HasX5Chain, R: Rng + ?Sized>(
         &self,
         doc_type: DocType,
@@ -58,6 +60,7 @@ impl Issuer {
         signer: &Signer,
         rng: &mut R,
         validity_info: ValidityInfo,
+        status: Option<StatusClaim>,
     ) -> Result<IssuedDocument> {
         let issuer_signed = IssuerSigned::new(
             doc_type.clone(),
@@ -66,6 +69,7 @@ impl Issuer {
             signer,
             rng,
             validity_info,
+            status,
         )?;
 
         Ok(IssuedDocument::new(doc_type, issuer_signed))
@@ -79,6 +83,7 @@ impl Issuer {
         signer: &Signer,
         rng: &mut R,
         validity_info: ValidityInfo,
+        status: Option<StatusClaim>,
     ) -> Result<IssuedDocument> {
         let mut name_spaces = HashMap::new();
         name_spaces.insert(MDL_NAMESPACE.into(), mdl.into());
@@ -90,6 +95,7 @@ impl Issuer {
             signer,
             rng,
             validity_info,
+            status,
         )
     }
 }
@@ -133,6 +139,7 @@ mod tests {
                 &issuer_signer,
                 &mut rng,
                 validity_info(100),
+                None,
             )
             .unwrap();
 
@@ -174,6 +181,7 @@ mod tests {
                 &issuer_signer,
                 &mut rng,
                 validity_info(100),
+                None,
             )
             .unwrap();
 
@@ -184,5 +192,42 @@ mod tests {
         let encoded_hex = hex::encode(&encoded);
 
         println!("{}", encoded_hex);
+    }
+
+    #[test]
+    fn test_issue_with_status() {
+        let mut rng = thread_rng();
+        let issuer_signer = crate::utils::test::issuer_signer();
+        let (_, device_key) = crate::utils::test::dummy_device_key();
+
+        let claims = Claims(HashMap::from([(
+            MDL_NAMESPACE.into(),
+            HashMap::<DataElementIdentifier, DataElementValue>::from([(
+                "name".into(),
+                "John".into(),
+            )]),
+        )]));
+
+        let issued = Issuer
+            .issue(
+                MDL_DOCUMENT_TYPE.into(),
+                claims,
+                device_key,
+                &issuer_signer,
+                &mut rng,
+                validity_info(100),
+                Some(StatusClaim::new(
+                    "https://example.com/status-list".parse().unwrap(),
+                    3,
+                )),
+            )
+            .unwrap();
+
+        let issuer_signed = issued.serialize_issuer_signed().unwrap();
+        let issuer_signed = IssuerSigned::from_base64_url(&issuer_signed).unwrap();
+        let status = issuer_signed.status().unwrap().unwrap();
+
+        assert_eq!(status.uri(), "https://example.com/status-list");
+        assert_eq!(status.idx(), 3);
     }
 }

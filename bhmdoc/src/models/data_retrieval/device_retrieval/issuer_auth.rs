@@ -27,6 +27,7 @@
 use std::collections::HashMap;
 
 use bh_jws_utils::{public_jwk_from_x5chain_leaf, JwkPublic, SignatureVerifier, SigningAlgorithm};
+use bh_status_list::StatusClaim;
 use bherror::traits::{
     ErrorContext as _, ForeignBoxed as _, ForeignError as _, PropagateError as _,
 };
@@ -105,6 +106,7 @@ impl IssuerAuth {
         device_key: DeviceKey,
         signer: &Signer,
         validity_info: ValidityInfo,
+        status: Option<StatusClaim>,
     ) -> crate::Result<Self> {
         // For now we are only signing with ES256
         let alg = match signer.algorithm() {
@@ -128,7 +130,8 @@ impl IssuerAuth {
         };
 
         let mso: MobileSecurityObjectBytes =
-            MobileSecurityObject::new(doc_type, name_spaces, device_key, validity_info)?.into();
+            MobileSecurityObject::new(doc_type, name_spaces, device_key, validity_info, status)?
+                .into();
         let mut mso_bytes = vec![];
         ciborium::into_writer(&mso, &mut mso_bytes).foreign_err(|| MdocError::IssuerAuth)?;
 
@@ -223,6 +226,15 @@ impl IssuerAuth {
 
         public_jwk_from_x5chain_leaf(&x5chain, alg, Some(DEFAULT_ISSUER_KID))
             .with_err(|| MdocError::InvalidPublicKey)
+    }
+
+    /// Get the pointer to the credential's status.
+    ///
+    /// For more information, take a look at the [Token Status List (TSL)][1].
+    ///
+    /// [1]: <https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-15.html>
+    pub fn status(&self) -> Result<Option<StatusClaim>> {
+        Ok(self.mso()?.status)
     }
 
     /// Return the [`MobileSecurityObject`] from the payload of the underlying
@@ -379,6 +391,15 @@ pub struct MobileSecurityObject {
     device_key_info: DeviceKeyInfo,
     doc_type: DocType,
     validity_info: ValidityInfo,
+
+    /// The information on where to read the status of this credential.
+    ///
+    /// It is in accordance with the _Section 6.3.2._ of [Token Status List
+    /// (TSL)][1].
+    ///
+    /// [1]: <https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-15.html>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<StatusClaim>,
 }
 
 impl MobileSecurityObject {
@@ -387,6 +408,7 @@ impl MobileSecurityObject {
         IssuerNameSpaces(ref name_spaces): &IssuerNameSpaces,
         device_key: DeviceKey,
         validity_info: ValidityInfo,
+        status: Option<StatusClaim>,
     ) -> Result<Self> {
         let digest = |item: &IssuerSignedItemBytes| -> Result<(DigestID, Bytes)> {
             Ok((
@@ -419,6 +441,7 @@ impl MobileSecurityObject {
             },
             doc_type,
             validity_info,
+            status,
         })
     }
 
@@ -825,6 +848,7 @@ mod tests {
             device_key,
             &issuer_signer,
             validity_info(current_time),
+            None,
         )
         .unwrap()
     }
@@ -1127,5 +1151,62 @@ eb0733d667005f7467cec4b87b9381a6ba1ede8e00df29f32a37230f39a842a54821fdd223092819
         }))
         .unwrap_err();
         assert!(err.is_data());
+    }
+
+    /// Example from the _Section 6.3.2._ of the [Token Status List (TSL)][1].
+    ///
+    /// [1]: <https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-15.html>
+    #[test]
+    fn deserialize_issuer_auth_with_status() {
+        const CBOR_HEX: &str =
+            "8443a10126a118215901f3308201ef30820195a00302010202140bfec7da97e048e\
+15ac3dacb9eafe82e64fd07f5300a06082a8648ce3d040302302331143012060355\
+04030c0b75746f7069612069616361310b3009060355040613025553301e170d323\
+4313030313030303030305a170d3235313030313030303030305a30213112301006\
+035504030c0975746f706961206473310b300906035504061302555330593013060\
+72a8648ce3d020106082a8648ce3d03010703420004ace7ab7340e5d9648c5a72a9\
+a6f56745c7aad436a03a43efea77b5fa7b88f0197d57d8983e1b37d3a539f4d5883\
+65e38cbbf5b94d68c547b5bc8731dcd2f146ba381a83081a5301c0603551d1f0415\
+30133011a00fa00d820b6578616d706c652e636f6d301e0603551d1204173015811\
+36578616d706c65406578616d706c652e636f6d301d0603551d0e0416041414e290\
+17a6c35621ffc7a686b7b72db06cd12351301f0603551d2304183016801454fa238\
+3a04c28e0d930792261c80c4881d2c00b300e0603551d0f0101ff04040302078030\
+150603551d250101ff040b3009060728818c5d050102300a06082a8648ce3d04030\
+20348003045022100b7103fd4b90529f50bd6f70c5ae5ce7f4f3d4d15a4e082812f\
+9fa1f5c2e5aa0a0220070b2822ec7ce6c56804923a85b2cfbffd054cf9a915f070c\
+fef7179a4bc6569590320d81859031ba766737461747573a16b7374617475735f6c\
+697374a26369647819019c63757269782168747470733a2f2f6578616d706c652e6\
+36f6d2f7374617475736c697374732f3167646f6354797065756f72672e69736f2e\
+31383031332e352e312e6d444c6776657273696f6e63312e306c76616c696469747\
+9496e666fa3667369676e6564c074323032342d31302d30315431333a33303a3032\
+5a6976616c696446726f6dc074323032342d31302d30315431333a33303a30325a6\
+a76616c6964556e74696cc074323032352d31302d30315431333a33303a30325a6c\
+76616c756544696765737473a1716f72672e69736f2e31383031332e352e31ac005\
+820a81d65ed5075fbd7ee19fa66e2bb3047ed826e2769873e7ef07c923da7a6f243\
+01582048701a9546492284d266ed81d439230a582d0e1f17a08ab1859a3efe98069\
+0a4025820d11fe48c8835b30bfb3895c3905436ddfb63f59ab9eee181b110985329\
+2a8f62035820a741bf05e20a8bc359e32426106ed0899b2c60262cc3acc637ddc99\
+41095fb7a045820ab67cb9a8f20a8572f77f02727367d08dc8e57fb89deb46b9c62\
+6e94457b7d8b055820bacddb4142b3842bd555206eb5acb27ded063294995c7e7fe\
+fbf93ece522604d065820bfd02b3aebdc05b53b5539226c38088d6d784b0ea0fab6\
+9eb9311650a48d325307582027dab70fe71da63e5e5d199e8ae5b79cbe8904bc30c\
+5b7544fb809e02ccb3e6a0858200dbd7ccc9c7727d3d17295f1b6f1914071670ee2\
+3d4d33530c31f1f406b8e3b7095820a5beb5efadf37f21637209abc519830681cc5\
+1f334818a823fec13b29552f5ba0a5820d8047c95f9272d7d07b2c13a9f5ac2ee02\
+380ab272a165e569391d89a2152c3c0b582004939930ffb4911ef03487a153605a3\
+0368b69f2437d6d21b4c90f92bc144c3e6d6465766963654b6579496e666fa16964\
+65766963654b6579a40102200121582096313d6c63e24e3372742bfdb1a33ba2c89\
+7dcd68ab8c753e4fbd48dca6b7f9a2258201fb3269edd418857de1b39a4e4a44b92\
+fa484caa722c228288f01d0c03a2c3d66f646967657374416c676f726974686d675\
+348412d3235365840b7c2d4abe85aa5ba814ef95de0385c71c802be8ac33a4a971a\
+85ed800ba7acb59cb21035f4a68fc0caa450cbefd3b255aec72f83595f0ae7b7d50\
+fe8a1c4cafe";
+
+        let cbor_bytes = hex::decode(CBOR_HEX).unwrap();
+        let issuer_auth: IssuerAuth = ciborium::from_reader(cbor_bytes.as_slice()).unwrap();
+        let status = issuer_auth.status().unwrap().unwrap();
+
+        assert_eq!(status.uri(), "https://example.com/statuslists/1");
+        assert_eq!(status.idx(), 412);
     }
 }

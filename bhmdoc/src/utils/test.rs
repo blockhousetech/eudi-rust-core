@@ -15,8 +15,11 @@
 
 use std::collections::HashMap;
 
-use bh_jws_utils::{Es256Signer, Es256SignerWithChain, Es256Verifier};
-use bhx5chain::{X509Trust, X5Chain};
+use bh_jws_utils::Es256Verifier;
+use bh_jws_utils::{Es256Signer, Es256SignerWithChain};
+use bh_status_list::StatusClaim;
+use bhx5chain::X509Trust;
+use bhx5chain::X5Chain;
 use rand::thread_rng;
 
 use crate::{
@@ -87,7 +90,7 @@ pub(crate) fn dummy_device_key() -> (Es256Signer, DeviceKey) {
     (signer, device_key)
 }
 
-pub(crate) fn issue_dummy_mdoc(current_time: u64) -> IssuedDocument {
+pub(crate) fn issue_dummy_mdoc(current_time: u64, status: Option<StatusClaim>) -> IssuedDocument {
     let mut rng = thread_rng();
     let issuer_signer = issuer_signer();
     let (_, device_key) = dummy_device_key();
@@ -108,12 +111,13 @@ pub(crate) fn issue_dummy_mdoc(current_time: u64) -> IssuedDocument {
             &issuer_signer,
             &mut rng,
             validity_info(current_time),
+            status,
         )
         .unwrap()
 }
 
-pub(crate) fn issue_dummy_mdoc_to_device(current_time: u64) -> Device {
-    let issued = issue_dummy_mdoc(current_time);
+pub(crate) fn issue_dummy_mdoc_to_device(current_time: u64, status: Option<StatusClaim>) -> Device {
+    let issued = issue_dummy_mdoc(current_time, status);
 
     Device::verify_issued(
         &issued.serialize_issuer_signed().unwrap(),
@@ -124,8 +128,8 @@ pub(crate) fn issue_dummy_mdoc_to_device(current_time: u64) -> Device {
     .unwrap()
 }
 
-pub(crate) fn present_dummy_mdoc(current_time: u64) -> DeviceResponse {
-    let device = issue_dummy_mdoc_to_device(100);
+pub(crate) fn present_dummy_mdoc(current_time: u64, status: Option<StatusClaim>) -> DeviceResponse {
+    let device = issue_dummy_mdoc_to_device(100, status);
 
     let doc_request = DocRequest::builder(MDL_DOCUMENT_TYPE.into())
         .add_name_space(

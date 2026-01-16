@@ -20,6 +20,7 @@
 use std::collections::HashMap;
 
 use bh_jws_utils::{SignatureVerifier, SigningAlgorithm};
+use bh_status_list::StatusClaim;
 use bherror::traits::{ErrorContext as _, ForeignError as _};
 use bhx5chain::X509Trust;
 use rand::Rng;
@@ -187,6 +188,15 @@ impl Document {
             )
             .ctx(|| "device signature")
     }
+
+    /// Get the pointer to the credential's status.
+    ///
+    /// For more information, take a look at the [Token Status List (TSL)][1].
+    ///
+    /// [1]: <https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-15.html>
+    pub fn status(&self) -> Result<Option<StatusClaim>> {
+        self.issuer_signed.status()
+    }
 }
 
 /// [`DocumentError`] as defined in the section `8.3.2.1.2.2` of the [ISO/IEC 18013-5:2021][1]
@@ -217,6 +227,7 @@ impl IssuerSigned {
         signer: &Signer,
         rng: &mut R,
         validity_info: ValidityInfo,
+        status: Option<StatusClaim>,
     ) -> Result<Self> {
         let name_spaces = IssuerNameSpaces(
             name_spaces
@@ -242,8 +253,14 @@ impl IssuerSigned {
                 .collect(),
         );
 
-        let issuer_auth =
-            IssuerAuth::new(doc_type, &name_spaces, device_key, signer, validity_info)?;
+        let issuer_auth = IssuerAuth::new(
+            doc_type,
+            &name_spaces,
+            device_key,
+            signer,
+            validity_info,
+            status,
+        )?;
 
         Ok(Self {
             name_spaces: Some(name_spaces),
@@ -330,6 +347,15 @@ impl IssuerSigned {
     pub(crate) fn validate_device(&self, current_time: u64, doc_type: &DocType) -> Result<()> {
         self.issuer_auth
             .validate_device(current_time, doc_type, self.name_spaces.as_ref())
+    }
+
+    /// Get the pointer to the credential's status.
+    ///
+    /// For more information, take a look at the [Token Status List (TSL)][1].
+    ///
+    /// [1]: <https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-15.html>
+    pub fn status(&self) -> Result<Option<StatusClaim>> {
+        self.issuer_auth.status()
     }
 }
 
@@ -783,6 +809,7 @@ mod tests {
             device_key,
             &issuer_signer,
             validity_info(100),
+            None,
         )
         .unwrap();
 
@@ -1253,7 +1280,7 @@ x1ZWJGQ3FlbGVtZW50SWRlbnRpZmllcm9pc3N1aW5nX2NvdW50cnk=";
 
     #[test]
     fn test_device_response_to_from_base64_cbor() {
-        let mut device_response = present_dummy_mdoc(100);
+        let mut device_response = present_dummy_mdoc(100, None);
 
         // we set this because after deserialization it gets set to that vec
         // automatically
