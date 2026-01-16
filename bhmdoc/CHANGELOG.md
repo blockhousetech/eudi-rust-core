@@ -8,6 +8,20 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- The optional `status` argument to the `issue` methods to allow including the
+  pointer to the status of the credential within the credential itself.
+- The `status` method on the `IssuerAuth`, `Document`, `IssuerSigned`, and
+  `Device` structures.
+- The `status` parameter to the `MobileSecurityObject` and its constructor.
+
+### Changed
+
+- The `Verifier`'s `verify` now returns the optional corresponding credential
+  status pointers, along with the claims, within the new `VerifiedClaims`
+  structure.
+
 ## [0.4.1] - 2026-01-13
 
 ### Changed
