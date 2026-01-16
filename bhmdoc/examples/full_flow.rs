@@ -16,6 +16,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use bh_jws_utils::{Es256Signer, Es256Verifier, SignerWithChain};
+use bh_status_list::StatusClaim;
 use bhmdoc::{
     generate_nonce,
     models::{
@@ -109,6 +110,11 @@ fn main() {
                 None,
             )
             .unwrap(),
+            // set to None if status list should not be used
+            Some(StatusClaim::new(
+                "https://issuer.com/status-list".parse().unwrap(),
+                1,
+            )),
         )
         .unwrap();
 
@@ -195,7 +201,10 @@ fn main() {
     assert_eq!(claims.len(), 1);
 
     // We get the claims for the mDL namespace.
-    let mdl_namespace_claims = claims[0].0.get(&MDL_NAMESPACE.into()).unwrap();
+    let mdl_namespace_claims = claims[0].claims.0.get(&MDL_NAMESPACE.into()).unwrap();
+
+    // We get the pointer to the status of the credential.
+    let credential_status_pointer = claims[0].status.as_ref().unwrap();
 
     // Assert that there are exactly 3 claims in the mDL namespace.
     assert_eq!(mdl_namespace_claims.len(), 3);
@@ -205,6 +214,12 @@ fn main() {
     assert!(mdl_namespace_claims.contains_key(&"given_name".into()));
     assert!(mdl_namespace_claims.contains_key(&"expiry_date".into()));
 
+    // Assert that the status pointer is as the issuer set it.
+    assert_eq!(
+        credential_status_pointer,
+        &StatusClaim::new("https://issuer.com/status-list".parse().unwrap(), 1)
+    );
+
     // Print the claims.
-    println!("Claim: {:?}", claims[0].0);
+    println!("Claim: {:?}", claims[0].claims.0);
 }
