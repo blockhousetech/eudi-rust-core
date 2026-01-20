@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-01-20
+
 ### Added
 
 - The optional `status` argument to the `issue` methods to allow including the
@@ -82,7 +84,8 @@ the Issuer.
 - README.md describing the crate.
 - Initial version of the `bhmdoc` crate.
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhmdoc/v0.4.1...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhmdoc/v0.5.0...HEAD>
+[0.5.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.5.0>
 [0.4.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.4.1>
 [0.4.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.4.0>
 [0.3.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.3.0>
