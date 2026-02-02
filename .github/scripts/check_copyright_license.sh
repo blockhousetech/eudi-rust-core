@@ -6,7 +6,7 @@
 set -euo pipefail
 
 readonly NOTICE=$(cat << EOF
-// Copyright (C) 2020-2025  The Blockhouse Technology Limited (TBTL).
+// Copyright (C) 2020-2026  The Blockhouse Technology Limited (TBTL).
 //
 // This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU Affero General Public License as published by
