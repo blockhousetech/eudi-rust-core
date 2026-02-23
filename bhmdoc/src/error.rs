@@ -108,6 +108,9 @@ pub enum MdocError {
     /// data.
     #[strum(to_string = "Validity Info is invalid")]
     InvalidValidityInfo,
+    /// The Verifier's public JWK is not valid.
+    #[strum(to_string = "Invalid Verifier's public JWK")]
+    InvalidJwkPublic,
 }
 
 impl bherror::BhError for MdocError {}
