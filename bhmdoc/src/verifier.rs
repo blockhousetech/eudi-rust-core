@@ -15,7 +15,7 @@
 
 //! This module provides the [`Verifier`] type which is used to verify issued `mDoc` Credentials.
 
-use bh_jws_utils::{SignatureVerifier, SigningAlgorithm};
+use bh_jws_utils::{JwkPublic, SignatureVerifier, SigningAlgorithm};
 use bh_status_list::StatusClaim;
 use bhx5chain::X509Trust;
 use rand::Rng;
@@ -84,6 +84,10 @@ impl Verifier {
     /// `trust` is set to [`None`], the authenticity of the Issuer **WILL NOT**
     /// be verified.
     ///
+    /// If the [`DeviceResponse`] was sent **encrypted** to the [`Verifier`],
+    /// the `jwk_public` argument **MUST BE** the [`Verifier`]'s public JWK used
+    /// to encrypt the response. Otherwise, it **MUST BE** [`None`].
+    ///
     /// # Error
     ///
     /// An error is returned if the provided [`DeviceResponse`] does not contain
@@ -93,7 +97,7 @@ impl Verifier {
         self,
         device_response: DeviceResponse,
         current_time: u64,
-        mdoc_generated_nonce: &str,
+        jwk_public: Option<&JwkPublic>,
         trust: Option<&X509Trust>,
         get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
     ) -> Result<Vec<VerifiedClaims>> {
@@ -104,7 +108,7 @@ impl Verifier {
             .map(|document| {
                 self.document_verify_into_claims(
                     document,
-                    mdoc_generated_nonce,
+                    jwk_public,
                     trust,
                     &get_signature_verifier,
                     current_time,
@@ -123,7 +127,7 @@ impl Verifier {
     fn document_verify_into_claims<'a>(
         &self,
         document: Document,
-        mdoc_generated_nonce: &str,
+        jwk_public: Option<&JwkPublic>,
         trust: Option<&X509Trust>,
         get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
         current_time: u64,
@@ -132,7 +136,7 @@ impl Verifier {
             &self.client_id,
             &self.response_uri,
             self.nonce(),
-            mdoc_generated_nonce,
+            jwk_public,
             trust,
             get_signature_verifier,
         )?;
@@ -166,7 +170,7 @@ mod tests {
             "nonce".to_owned(),
         );
 
-        let device_response = present_dummy_mdoc(100, None);
+        let device_response = present_dummy_mdoc(100, None, None);
 
         let expected_claims = vec![VerifiedClaims {
             claims: Claims(HashMap::from([(
@@ -179,13 +183,9 @@ mod tests {
         let trust = issuer_x509_trust();
 
         let claims = verifier
-            .verify(
-                device_response,
-                105,
-                "mdoc_generated_nonce",
-                Some(&trust),
-                |_| Some(&Es256Verifier),
-            )
+            .verify(device_response, 105, None, Some(&trust), |_| {
+                Some(&Es256Verifier)
+            })
             .unwrap();
 
         assert_eq!(expected_claims, claims);
@@ -199,19 +199,15 @@ mod tests {
             "nonce".to_owned(),
         );
 
-        let device_response = present_dummy_mdoc(100, None);
+        let device_response = present_dummy_mdoc(100, None, None);
 
         // no Issuer is trusted (empty `trust`)
         let trust = X509Trust::new(vec![]);
 
         let err = verifier
-            .verify(
-                device_response,
-                105,
-                "mdoc_generated_nonce",
-                Some(&trust),
-                |_| Some(&Es256Verifier),
-            )
+            .verify(device_response, 105, None, Some(&trust), |_| {
+                Some(&Es256Verifier)
+            })
             .unwrap_err();
 
         assert_eq!(err.error, MdocError::X5Chain);
@@ -225,7 +221,7 @@ mod tests {
             "nonce".to_owned(),
         );
 
-        let device_response = present_dummy_mdoc(100, None);
+        let device_response = present_dummy_mdoc(100, None, None);
 
         let expected_claims = vec![VerifiedClaims {
             claims: Claims(HashMap::from([(
@@ -237,9 +233,7 @@ mod tests {
 
         // every Issuer is trusted (`trust` not provided)
         let claims = verifier
-            .verify(device_response, 105, "mdoc_generated_nonce", None, |_| {
-                Some(&Es256Verifier)
-            })
+            .verify(device_response, 105, None, None, |_| Some(&Es256Verifier))
             .unwrap();
 
         assert_eq!(expected_claims, claims);
@@ -259,6 +253,7 @@ mod tests {
                 "https://example.com/status-list".parse().unwrap(),
                 74,
             )),
+            None,
         );
 
         let expected_claims = vec![VerifiedClaims {
@@ -274,7 +269,41 @@ mod tests {
 
         // every Issuer is trusted (`trust` not provided)
         let claims = verifier
-            .verify(device_response, 105, "mdoc_generated_nonce", None, |_| {
+            .verify(device_response, 105, None, None, |_| Some(&Es256Verifier))
+            .unwrap();
+
+        assert_eq!(expected_claims, claims);
+    }
+
+    #[test]
+    fn test_verify_with_jwk_public_success() {
+        let jwk_public = serde_json::json!({
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "Nd4Fg0Yp6UaNe2Kv8RcXt9kLm3Qw7Zx2Vc8Bn5Hs1Jd",
+            "y": "Wp2Ls9Xd4Rf6Hy1Nm3Tq7Vb0Zj5UgPe4Ka9Mn2QorT8k",
+        });
+        let jwk_public = jwk_public.as_object().unwrap();
+
+        let verifier = Verifier::from_parts(
+            "client_id".to_owned(),
+            "response_uri".to_owned(),
+            "nonce".to_owned(),
+        );
+
+        let device_response = present_dummy_mdoc(100, None, Some(jwk_public));
+
+        let expected_claims = vec![VerifiedClaims {
+            claims: Claims(HashMap::from([(
+                MDL_NAMESPACE.into(),
+                HashMap::from([("lastName".into(), "Doe".into())]),
+            )])),
+            status: None,
+        }];
+
+        // every Issuer is trusted (`trust` not provided)
+        let claims = verifier
+            .verify(device_response, 105, Some(jwk_public), None, |_| {
                 Some(&Es256Verifier)
             })
             .unwrap();

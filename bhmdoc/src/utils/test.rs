@@ -15,11 +15,9 @@
 
 use std::collections::HashMap;
 
-use bh_jws_utils::Es256Verifier;
-use bh_jws_utils::{Es256Signer, Es256SignerWithChain};
+use bh_jws_utils::{Es256Signer, Es256SignerWithChain, Es256Verifier, JwkPublic};
 use bh_status_list::StatusClaim;
-use bhx5chain::X509Trust;
-use bhx5chain::X5Chain;
+use bhx5chain::{X509Trust, X5Chain};
 use rand::thread_rng;
 
 use crate::{
@@ -128,7 +126,11 @@ pub(crate) fn issue_dummy_mdoc_to_device(current_time: u64, status: Option<Statu
     .unwrap()
 }
 
-pub(crate) fn present_dummy_mdoc(current_time: u64, status: Option<StatusClaim>) -> DeviceResponse {
+pub(crate) fn present_dummy_mdoc(
+    current_time: u64,
+    status: Option<StatusClaim>,
+    jwk_public: Option<&JwkPublic>,
+) -> DeviceResponse {
     let device = issue_dummy_mdoc_to_device(100, status);
 
     let doc_request = DocRequest::builder(MDL_DOCUMENT_TYPE.into())
@@ -146,7 +148,7 @@ pub(crate) fn present_dummy_mdoc(current_time: u64, status: Option<StatusClaim>)
             "client_id",
             "response_uri",
             "nonce",
-            "mdoc_generated_nonce",
+            jwk_public,
             &device_signer(),
         )
         .unwrap()

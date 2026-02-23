@@ -15,7 +15,7 @@
 
 //! This module defines a [`Device`] type that works with an issued Credential.
 
-use bh_jws_utils::{SignatureVerifier, SigningAlgorithm};
+use bh_jws_utils::{JwkPublic, SignatureVerifier, SigningAlgorithm};
 use bh_status_list::StatusClaim;
 use bherror::traits::ForeignBoxed as _;
 
@@ -105,6 +105,11 @@ impl Device {
     ///
     /// All the disclosed claims will also be signed by the [`Device`].
     ///
+    /// If the resulting [`DeviceResponse`] will be sent **encrypted** to the
+    /// respective Verifier, the `jwk_public` argument **MUST BE** the
+    /// Verifier's public JWK used to encrypt the response. Otherwise, it **MUST
+    /// BE** [`None`].
+    ///
     /// The underlying `status` will always be set to `0` (_OK_) as per `Table
     /// 8` of the [ISO/IEC 18013-5:2021][1], since the errors are returned
     /// within the `Result`.
@@ -114,6 +119,8 @@ impl Device {
     /// The method can result with the following errors:
     /// - [`DeviceAuthentication`][MdocError::DeviceAuthentication] if the
     ///   payload for the Device's signature fails to compute,
+    /// - [`InvalidJwkPublic`][MdocError::InvalidJwkPublic] if the provided
+    ///   Verifier's public JWK is not valid,
     /// - [`Signing`][MdocError::Signing] if the Device's signature fails to
     ///   compute,
     /// - [`DocumentExpired`][MdocError::DocumentExpired] if the underlying
@@ -141,7 +148,7 @@ impl Device {
         client_id: &str,
         response_uri: &str,
         nonce: &str,
-        mdoc_generated_nonce: &str,
+        jwk_public: Option<&JwkPublic>,
         signer: &impl bh_jws_utils::Signer,
     ) -> Result<DeviceResponse> {
         // the provided `signer` must match the signed device public key
@@ -171,7 +178,7 @@ impl Device {
             client_id,
             response_uri,
             nonce,
-            mdoc_generated_nonce,
+            jwk_public,
             &self.doc_type,
             signer,
         )?;
@@ -348,7 +355,54 @@ mod tests {
                 "client_id",
                 "response_uri",
                 "nonce",
-                "mdoc_generated_nonce",
+                None,
+                &device_signer(),
+            )
+            .unwrap();
+
+        let documents = device_response.into_documents().unwrap();
+        assert_eq!(1, documents.len());
+        let document = documents.into_iter().next().unwrap();
+
+        let issuer_signed_claims = document.issuer_signed.into_claims().0;
+        let device_signed_claims = document.device_signed.into_claims().0;
+
+        let expected_claims = HashMap::from([(
+            MDL_NAMESPACE.into(),
+            HashMap::from([("lastName".into(), "Doe".into())]),
+        )]);
+
+        assert_eq!(expected_claims, issuer_signed_claims);
+        assert_eq!(issuer_signed_claims, device_signed_claims);
+    }
+
+    #[test]
+    fn test_present_with_jwk_public_successful() {
+        let device = issue_dummy_mdoc_to_device(100, None);
+
+        let doc_request = DocRequest::builder(MDL_DOCUMENT_TYPE.into())
+            .add_name_space(
+                MDL_NAMESPACE.into(),
+                HashMap::from([("lastName".into(), false.into())]),
+            )
+            .build();
+        let request = DeviceRequest::new(vec![doc_request]);
+
+        let jwk_public = serde_json::json!({
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "rT9kLm3Qw7Zx2Vc8Bn5Hs1Jd4Fg0Yp6UaNe2Kv8RcXt",
+            "y": "Ck8Wp2Ls9Xd4Rf6Hy1Nm3Tq7Vb0Zj5UgPe4Ka9Mn2Qo",
+        });
+
+        let device_response = device
+            .present(
+                101,
+                &request,
+                "client_id",
+                "response_uri",
+                "nonce",
+                Some(jwk_public.as_object().unwrap()),
                 &device_signer(),
             )
             .unwrap();
@@ -383,7 +437,7 @@ mod tests {
                 "client_id",
                 "response_uri",
                 "nonce",
-                "mdoc_generated_nonce",
+                None,
                 &device_signer(),
             )
             .unwrap();
@@ -412,7 +466,7 @@ mod tests {
                 "client_id",
                 "response_uri",
                 "nonce",
-                "mdoc_generated_nonce",
+                None,
                 &device_signer(),
             )
             .unwrap();
@@ -448,7 +502,7 @@ mod tests {
                 "client_id",
                 "response_uri",
                 "nonce",
-                "mdoc_generated_nonce",
+                None,
                 &device_signer(),
             )
             .unwrap();
@@ -484,7 +538,7 @@ mod tests {
                 "client_id",
                 "response_uri",
                 "nonce",
-                "mdoc_generated_nonce",
+                None,
                 &device_signer(),
             )
             .unwrap();
@@ -514,7 +568,7 @@ mod tests {
                 "client_id",
                 "response_uri",
                 "nonce",
-                "mdoc_generated_nonce",
+                None,
                 &device_signer(),
             )
             .unwrap_err();
@@ -536,7 +590,7 @@ mod tests {
                 "client_id",
                 "response_uri",
                 "nonce",
-                "mdoc_generated_nonce",
+                None,
                 &device_signer(),
             )
             .unwrap_err();
@@ -568,15 +622,13 @@ mod tests {
                 "client_id",
                 "response_uri",
                 "nonce",
-                "mdoc_generated_nonce",
+                None,
                 &device_signer(),
             )
             .unwrap();
 
         let claims = verifier
-            .verify(device_response, 101, "mdoc_generated_nonce", None, |_| {
-                Some(&Es256Verifier)
-            })
+            .verify(device_response, 101, None, None, |_| Some(&Es256Verifier))
             .unwrap();
         assert_eq!(1, claims.len());
         let claims = claims.into_iter().next().unwrap().claims.0;
@@ -601,7 +653,7 @@ mod tests {
                 "client_id",
                 "response_uri",
                 "nonce",
-                "mdoc_generated_nonce",
+                None,
                 &device_signer(), // use the correct signer
             )
             .unwrap();
@@ -614,7 +666,7 @@ mod tests {
                 "client_id",
                 "response_uri",
                 "nonce",
-                "mdoc_generated_nonce",
+                None,
                 &issuer_signer(), // use the wrong signer
             )
             .unwrap_err();

@@ -18,7 +18,6 @@ use std::{collections::HashMap, str::FromStr};
 use bh_jws_utils::{Es256Signer, Es256Verifier, SignerWithChain};
 use bh_status_list::{StatusClaim, UriBuf};
 use bhmdoc::{
-    generate_nonce,
     models::{
         data_retrieval::device_retrieval::issuer_auth::ValidityInfo,
         mdl::{MDLMandatory, MDL},
@@ -154,8 +153,6 @@ fn main() {
 
     let device_request = DeviceRequest::new(vec![doc_request]);
 
-    let mdoc_generated_nonce = generate_nonce(&mut rand::thread_rng());
-
     let client_id = "example_client_id".to_owned();
     let response_uri = "http://example_response_uri".to_owned();
 
@@ -176,7 +173,7 @@ fn main() {
             &client_id,
             &response_uri,
             verifier.nonce(),
-            &mdoc_generated_nonce,
+            None,
             &device_signer,
         )
         .unwrap();
@@ -190,7 +187,7 @@ fn main() {
         .verify(
             device_response,
             current_time,
-            &mdoc_generated_nonce,
+            None,
             None,
             // Currently we only support ES256.
             |_alg| Some(&Es256Verifier),

@@ -105,7 +105,7 @@
 //!     .verify(
 //!         device_response,
 //!         current_time,
-//!         "example mdoc generated nonce",
+//!         None,
 //!         None,
 //!         get_signature_verifier,
 //!     )

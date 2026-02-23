@@ -8,6 +8,13 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The stable OpenID4VP specification is now supported:
+    - the `mdoc_generated_nonce` is effectively replaced by the Verifier's JWK
+      SHA-256 Thumbprint, thus changing the calculation of the payload for the
+      Device's signature.
+
 ## [0.5.0] - 2026-01-20
 
 ### Added
