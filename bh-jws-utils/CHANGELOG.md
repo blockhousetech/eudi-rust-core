@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-02-24
+
 ### Added
 
 - Added `jwk_sha256_thumbprint_bytes` utility function to calculate the JWK
@@ -105,7 +107,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - README.md describing the crate.
 - Initial version of the `bh-jws-utils` crate.
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.6.1...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.6.2...HEAD>
+[0.6.2]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.6.2>
 [0.6.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.6.1>
 [0.6.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.6.0>
 [0.5.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.5.1>
