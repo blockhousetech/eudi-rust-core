@@ -17,6 +17,8 @@ bhx5chain = "0.3"
 # `jwt` crate supports cryptography backend injection for signing/verification
 # via traits, unlike the much more popular `jsonwebtoken`
 jwt = "0.16.0"
+# needed for the JWK SHA-256 Thumbprint calculation
+jsonwebtoken = { version = "10.3", features = ["aws_lc_rs"] }
 # We need `openssl` for more than just the signer backend implementation, so
 # it's no longer optional
 openssl = { version = "0.10" }
@@ -27,6 +29,7 @@ strum_macros = "0.27"
 
 [dev-dependencies]
 bhx5chain = { version = "0.3", features = ["test-utils"] }
+hex = "0.4"
 
 [package.metadata.docs.rs]
 all-features = true
