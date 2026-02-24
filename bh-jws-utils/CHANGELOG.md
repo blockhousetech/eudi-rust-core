@@ -8,6 +8,11 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added `jwk_sha256_thumbprint_bytes` utility function to calculate the JWK
+  SHA-256 Thumbprint of the public JWK.
+
 ## [0.6.1] - 2025-11-10
 
 ### Changed
@@ -17,11 +22,13 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 ## [0.6.0] - 2025-11-04
 
 ### Added
+
 - Added `private_key_pem`, `private_jwk` and `from_private_jwk` methods for
   `Es256Signer` to complete the method suite of useful `Es256Signer` serializations.
 - Added `JwkPrivate` to improve JWK ecosystem.
 
 ### Changed
+
 - Changed `Es256Signer` (de)serialization representation from PEM representation
   as bytes to JWK representation.
 
@@ -60,9 +67,9 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 - The `openssl` default Cargo feature no longer exists, but the code it gated is
   retained. This was done because of two reasons:
-  - an existing public function had silently depended on this default feature;
-  - new code requires the `openssl` dependency for certain cryptographic checks,
-    making it no longer optional and the Cargo feature not really useful.
+    - an existing public function had silently depended on this default feature;
+    - new code requires the `openssl` dependency for certain cryptographic checks,
+      making it no longer optional and the Cargo feature not really useful.
 
 - The `Es256SignerWithChain` `struct` is now a type alias for the newly added
   generic `SignerWithChain` specialized with `Es256Signer` as before.
@@ -97,7 +104,6 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
   `bh-jws-utils` library.
 - README.md describing the crate.
 - Initial version of the `bh-jws-utils` crate.
-
 
 [Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.6.1...HEAD>
 [0.6.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.6.1>

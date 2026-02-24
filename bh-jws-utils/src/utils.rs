@@ -17,9 +17,11 @@ use std::cell::Cell;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use bherror::traits::{ErrorContext as _, ForeignError as _, PropagateError as _};
+use serde_json::Value;
 
 use crate::{
-    openssl_ec_pub_key_to_jwk, CryptoError, JwkPublic, SignatureVerifier, Signer, SigningAlgorithm,
+    openssl_ec_pub_key_to_jwk, CryptoError, FormatError, JwkPublic, SignatureVerifier, Signer,
+    SigningAlgorithm,
 };
 
 /// Type alias for a boxed error.
@@ -38,6 +40,12 @@ pub fn construct_jws_payload(header: &str, claims: &str) -> String {
 /// Returns the `base64url`-encoded string of the given `input`.
 pub fn base64_url_encode<T: AsRef<[u8]>>(input: T) -> String {
     URL_SAFE_NO_PAD.encode(input)
+}
+
+/// Decodes the given `payload` as the `base64url`-encoded string **without
+/// padding** into bytes.
+pub fn base64_url_decode<T: AsRef<[u8]>>(payload: T) -> Result<Vec<u8>, base64::DecodeError> {
+    URL_SAFE_NO_PAD.decode(payload)
 }
 
 /// Utility function that delegates to [`jwt::SignWithKey`] while allowing
@@ -189,5 +197,54 @@ pub fn public_jwk_from_x5chain_leaf(
         _ => Err(bherror::Error::root(CryptoError::Unsupported(
             "only Es256 is currently supported".to_string(),
         ))),
+    }
+}
+
+/// Compute the _JWK SHA-256 Thumbprint_ of the provided public JWK.
+///
+/// The thumbprint is computed as per [RFC 7638][1], and returned as raw bytes.
+/// In order to obtain a proper thumbprint string, the output needs to be
+/// `base64url`-encoded **without** padding.
+///
+/// [1]: <https://www.rfc-editor.org/info/rfc7638>
+pub fn jwk_sha256_thumbprint_bytes(jwk: JwkPublic) -> bherror::Result<Vec<u8>, FormatError> {
+    let jwk: jsonwebtoken::jwk::Jwk = serde_json::from_value(Value::Object(jwk))
+        .foreign_err(|| FormatError::JwkParsingFailed("invalid JWK".to_owned()))?;
+
+    let thumbprint = jwk.thumbprint(jsonwebtoken::jwk::ThumbprintHash::SHA256);
+
+    // decode to get the raw bytes
+    base64_url_decode(thumbprint)
+        // should never fail
+        .foreign_err(|| FormatError::JwkParsingFailed("invalid SHA-256 Thumbprint".to_owned()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Example taken from the `Section B.2.6.1.` of the [OpenID4VP][1].
+    ///
+    /// [1]: <https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#appendix-B.2.6.1>
+    #[test]
+    fn test_jwk_sha256_thumbprint_bytes() {
+        let Value::Object(jwk) = serde_json::json!({
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "DxiH5Q4Yx3UrukE2lWCErq8N8bqC9CHLLrAwLz5BmE0",
+            "y": "XtLM4-3h5o3HUH0MHVJV0kyq0iBlrBwlh8qEDMZ4-Pc",
+            "use": "enc",
+            "alg": "ECDH-ES",
+            "kid": "1",
+        }) else {
+            unreachable!("JWK must be JSON object")
+        };
+
+        let thumbprint = jwk_sha256_thumbprint_bytes(jwk).unwrap();
+        let thumbprint_hex = hex::encode(thumbprint);
+
+        let expected = "4283ec927ae0f208daaa2d026a814f2b22dca52cf85ffa8f3f8626c6bd669047";
+
+        assert_eq!(expected, thumbprint_hex);
     }
 }
