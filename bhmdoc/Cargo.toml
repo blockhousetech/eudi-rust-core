@@ -1,6 +1,6 @@
 [package]
 name = "bhmdoc"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["TBTL Tech <tech@tbtl.com>"]
 categories = ["authentication", "cryptography", "encoding"]
 description = "TBTL's library for handling mDL/mdoc specification."
