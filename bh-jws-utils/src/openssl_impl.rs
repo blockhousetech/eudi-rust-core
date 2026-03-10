@@ -529,7 +529,7 @@ mod tests {
             5RjJIWlEifX19.jeF9GjGbjCr0NND0SbkV4HeSpsysixALFScJl4bYkIykXhF6cRtqni\
             64_d7X6Ef8Rx80rfsgXe0H7TdiSoIJOw";
 
-        // Can't use `jwt::Header` since it doesn't recognize `"typ": "vc+sd-jwt"`,
+        // Can't use `jwt::Header` since it doesn't recognize `"typ": "dc+sd-jwt"`,
         // can't use `crate::IssuerJwtHeader` since this example lacks `kid` ...
         #[derive(Debug, Deserialize)]
         struct MinimalHeader {
