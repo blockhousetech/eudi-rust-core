@@ -150,8 +150,8 @@ fn check_registered_path_in_paths(paths: &[&[crate::JsonNodePathSegment]]) -> Re
 /// Value to set for the [`typ`][IssuerJwtHeader::typ] header parameter when issuing an SD-JWT
 /// verifiable credential.
 ///
-/// <https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-01#section-3.2.1-2>
-pub const TYP_VC_SD_JWT: &str = "vc+sd-jwt";
+/// <https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-15#section-3.2.1-2>
+pub const TYP_VC_SD_JWT: &str = "dc+sd-jwt";
 
 /// JWT Header of a [`Issuer`].
 ///

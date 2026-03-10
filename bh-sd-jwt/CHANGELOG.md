@@ -8,6 +8,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Replace `vc+sd-jwt` with `dc+sd-jwt` in `typ` header parameter in the SD-JWT.
+
 ## [0.4.1] - 2026-01-13
 
 ### Changed
