@@ -51,6 +51,9 @@ pub struct Issuer;
 
 impl Issuer {
     /// Issue a new `mso_mdoc` Credential.
+    ///
+    /// The `mdoc` Device will be **authorized to present all** of those
+    /// **claims**.
     #[allow(clippy::too_many_arguments)]
     pub fn issue<Signer: bh_jws_utils::Signer + bh_jws_utils::HasX5Chain, R: Rng + ?Sized>(
         &self,
