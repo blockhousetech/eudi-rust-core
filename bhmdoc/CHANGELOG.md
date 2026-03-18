@@ -8,7 +8,11 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
-## [0.6.1] - 2026-03-18
+## [0.6.1] - 2026-03-19
+
+### Changed
+
+- The `Device` will no longer additionally sign the disclosed claims.
 
 ### Added
 

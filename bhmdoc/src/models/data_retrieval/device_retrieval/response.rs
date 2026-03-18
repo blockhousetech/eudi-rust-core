@@ -445,31 +445,6 @@ impl IssuerNameSpaces {
 
         Some(Self(filtered))
     }
-
-    /// Converts the Issuer-signed claims to the format to be signed by the
-    /// Device.
-    pub(crate) fn to_device_name_spaces(&self) -> DeviceNameSpaces {
-        DeviceNameSpaces(
-            self.0
-                .iter()
-                .map(|(name_space, issuer_signed_items)| {
-                    let device_signed_items = DeviceSignedItems(
-                        issuer_signed_items
-                            .iter()
-                            .map(|item| {
-                                (
-                                    item.0.inner.element_identifier.clone(),
-                                    item.0.inner.element_value.clone(),
-                                )
-                            })
-                            .collect(),
-                    );
-
-                    (name_space.clone(), device_signed_items)
-                })
-                .collect(),
-        )
-    }
 }
 
 /// [`IssuerSignedItemBytes`] as defined in the section `8.3.2.1.2.2` of the [ISO/IEC
