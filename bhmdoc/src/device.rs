@@ -15,6 +15,8 @@
 
 //! This module defines a [`Device`] type that works with an issued Credential.
 
+use std::collections::HashMap;
+
 use bh_jws_utils::{JwkPublic, SignatureVerifier, SigningAlgorithm};
 use bh_status_list::StatusClaim;
 use bherror::traits::ForeignBoxed as _;
@@ -26,7 +28,7 @@ use crate::{
             device_retrieval::{
                 issuer_auth::ValidityInfo,
                 request::DeviceRequest,
-                response::{DeviceSigned, Document, IssuerNameSpaces, IssuerSigned},
+                response::{DeviceSigned, Document, IssuerSigned},
             },
             BorrowedClaims, Claims,
         },
@@ -103,7 +105,8 @@ impl Device {
     /// claims requested within the [`DeviceRequest`] will be ignored as
     /// specified in the `Section 8.3.2.2.2.1` of the [ISO/IEC 18013-5:2021][1].
     ///
-    /// All the disclosed claims will also be signed by the [`Device`].
+    /// The disclosed claims will **not be** additionally **signed** by the
+    /// [`Device`].
     ///
     /// If the resulting [`DeviceResponse`] will be sent **encrypted** to the
     /// respective Verifier, the `jwk_public` argument **MUST BE** the
@@ -165,12 +168,8 @@ impl Device {
             .issuer_signed
             .filtered_claims(doc_request.name_spaces());
 
-        // sign all the claims with the device as well
-        let device_name_spaces = issuer_signed
-            .name_spaces
-            .as_ref()
-            .map(IssuerNameSpaces::to_device_name_spaces)
-            .unwrap_or_default();
+        // don't additionally sign disclosed claims
+        let device_name_spaces = HashMap::new().into();
 
         // create a `DeviceSigned`, i.e. key-binding
         let device_signed = DeviceSigned::new(
@@ -373,7 +372,7 @@ mod tests {
         )]);
 
         assert_eq!(expected_claims, issuer_signed_claims);
-        assert_eq!(issuer_signed_claims, device_signed_claims);
+        assert!(device_signed_claims.is_empty());
     }
 
     #[test]
@@ -420,7 +419,7 @@ mod tests {
         )]);
 
         assert_eq!(expected_claims, issuer_signed_claims);
-        assert_eq!(issuer_signed_claims, device_signed_claims);
+        assert!(device_signed_claims.is_empty());
     }
 
     #[test]
@@ -520,7 +519,7 @@ mod tests {
         )]);
 
         assert_eq!(expected_claims, issuer_signed_claims);
-        assert_eq!(issuer_signed_claims, device_signed_claims);
+        assert!(device_signed_claims.is_empty());
     }
 
     #[test]
