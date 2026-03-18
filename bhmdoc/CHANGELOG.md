@@ -8,6 +8,11 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- The Mobile Security Object now includes the `KeyAuthorizations`, allowing the
+  Device to present all of the issued claims (name spaces).
+
 ## [0.6.0] - 2026-02-25
 
 ### Changed

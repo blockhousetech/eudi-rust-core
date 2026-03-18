@@ -219,7 +219,10 @@ pub struct IssuerSigned {
 }
 
 impl IssuerSigned {
-    /// Creates a new `IssuerSigned` object with a single namespace.
+    /// Creates a new `IssuerSigned` object of the provided [`Claims`].
+    ///
+    /// The `mdoc` Device will be **authorized to present all** of those
+    /// **claims**.
     pub(crate) fn new<Signer: bh_jws_utils::Signer + bh_jws_utils::HasX5Chain, R: Rng + ?Sized>(
         doc_type: DocType,
         name_spaces: Claims,

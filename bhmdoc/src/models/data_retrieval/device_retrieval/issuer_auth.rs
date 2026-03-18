@@ -93,6 +93,9 @@ impl IssuerAuth {
     /// Digests are made using [`IssuerSignedItemBytes`] as specified in section `9.1.2.5` of the
     /// [ISO/IEC 18013-5:2021][1].
     ///
+    /// Furthermore, the `mdoc` Device will be **authorized to present all** of the provided **name
+    /// spaces**.
+    ///
     /// Cryptographic material used for issuing the credential are the following.
     ///
     ///  - `issuer_key`: key used for signing [`IssuerAuth`] and exporting it's public key for
@@ -430,13 +433,19 @@ impl MobileSecurityObject {
             })
             .collect::<Result<_>>()?;
 
+        // authorize Device for all name spaces
+        let key_authorizations = (!name_spaces.is_empty()).then(|| KeyAuthorizations {
+            name_spaces: Some(AuthorizedNameSpaces(name_spaces.keys().cloned().collect())),
+            data_elements: None,
+        });
+
         Ok(MobileSecurityObject {
             version: MOBILE_SECURITY_OBJECT_VERSION.to_owned(),
             digest_algorithm: MSO_DEFAULT_DIGEST_ALG,
             value_digests: ValueDigests(value_digests),
             device_key_info: DeviceKeyInfo {
                 device_key,
-                key_authorizations: None,
+                key_authorizations,
                 key_info: None,
             },
             doc_type,
@@ -1208,5 +1217,78 @@ fe8a1c4cafe";
 
         assert_eq!(status.uri(), "https://example.com/statuslists/1");
         assert_eq!(status.idx(), 412);
+    }
+
+    #[test]
+    fn mso_authorizes_device_for_all_name_spaces() {
+        let name_spaces = IssuerNameSpaces(
+            [
+                (
+                    "name_space_1".to_owned().into(),
+                    vec![IssuerSignedItem {
+                        digest_id: 0u64.into(),
+                        random: "b82484fc40a0f1c999e9aa168eb6f57c".parse().unwrap(),
+                        element_identifier: "given_name".to_owned().into(),
+                        element_value: "John".into(),
+                    }
+                    .into()],
+                ),
+                (
+                    "name_space_2".to_owned().into(),
+                    vec![IssuerSignedItem {
+                        digest_id: 1u64.into(),
+                        random: "f4b65b3379407aa9a0390309b792344c".parse().unwrap(),
+                        element_identifier: "family_name".to_owned().into(),
+                        element_value: "Doe".into(),
+                    }
+                    .into()],
+                ),
+            ]
+            .into(),
+        );
+
+        let (_, device_key) = crate::utils::test::dummy_device_key();
+
+        let mso = MobileSecurityObject::new(
+            "doc_type".into(),
+            &name_spaces,
+            device_key,
+            validity_info(100),
+            None,
+        )
+        .unwrap();
+
+        let KeyAuthorizations {
+            name_spaces,
+            data_elements,
+        } = mso.device_key_info.key_authorizations.unwrap();
+
+        assert_matches!(data_elements, None);
+
+        let AuthorizedNameSpaces(name_spaces) = name_spaces.unwrap();
+
+        assert_eq!(name_spaces.len(), 2);
+
+        for name_space in ["name_space_1", "name_space_2"] {
+            assert!(name_spaces.contains(&name_space.into()));
+        }
+    }
+
+    #[test]
+    fn mso_key_authorization_no_name_spaces() {
+        let name_spaces = IssuerNameSpaces(HashMap::new());
+
+        let (_, device_key) = crate::utils::test::dummy_device_key();
+
+        let mso = MobileSecurityObject::new(
+            "doc_type".into(),
+            &name_spaces,
+            device_key,
+            validity_info(100),
+            None,
+        )
+        .unwrap();
+
+        assert_matches!(mso.device_key_info.key_authorizations, None);
     }
 }
