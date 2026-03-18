@@ -433,10 +433,25 @@ impl MobileSecurityObject {
             })
             .collect::<Result<_>>()?;
 
+        let data_elements = name_spaces
+            .iter()
+            .map(|(name_space, items)| {
+                let items = items
+                    .iter()
+                    .map(|item| item.0.inner.element_identifier.to_owned())
+                    .collect();
+
+                (name_space.to_owned(), DataElementsArray(items))
+            })
+            .collect();
+
+        let data_elements = Some(AuthorizedDataElements(data_elements));
+
         // authorize Device for all name spaces
         let key_authorizations = (!name_spaces.is_empty()).then(|| KeyAuthorizations {
-            name_spaces: Some(AuthorizedNameSpaces(name_spaces.keys().cloned().collect())),
-            data_elements: None,
+            //name_spaces: Some(AuthorizedNameSpaces(name_spaces.keys().cloned().collect())),
+            name_spaces: None,
+            data_elements,
         });
 
         Ok(MobileSecurityObject {
