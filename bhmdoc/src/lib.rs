@@ -110,6 +110,8 @@
 //!         get_signature_verifier,
 //!     )
 //!     .unwrap();
+//!
+//! let device_public_key = &claims[0].device_public_key;
 //! ```
 
 pub mod device;

@@ -8,6 +8,11 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- The `Verifier`'s `verify` now also returns the document's signed device
+  public key as `VerifiedClaims::device_public_key`.
+
 ## [0.6.1] - 2026-03-19
 
 ### Changed

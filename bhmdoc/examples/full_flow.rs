@@ -204,6 +204,9 @@ fn main() {
     // Get the status pointer of that one document.
     let credential_status_pointer = &verified_claims[0].status;
 
+    // Get the device public key of that one document.
+    let device_public_key = &verified_claims[0].device_public_key;
+
     // We get the claims for the mDL namespace.
     let mdl_namespace_claims = claims.get(&MDL_NAMESPACE.into()).unwrap();
 
@@ -220,6 +223,9 @@ fn main() {
         credential_status_pointer,
         &Some(StatusClaim::new(status_list_uri, status_list_idx))
     );
+
+    // Assert that the device public key matches the one used by the device.
+    assert_eq!(device_public_key, &device_jwk);
 
     // Print the claims.
     println!("Claim: {:?}", claims);

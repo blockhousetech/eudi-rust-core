@@ -46,6 +46,10 @@ pub struct VerifiedClaims {
     /// The pointer to the status of the credential within the corresponding
     /// status list.
     pub status: Option<StatusClaim>,
+
+    /// The public JWK corresponding to the device key signed into the
+    /// credential.
+    pub device_public_key: JwkPublic,
 }
 
 impl Verifier {
@@ -143,9 +147,13 @@ impl Verifier {
 
         document.validate(current_time)?;
 
+        let status = document.status()?;
+        let device_public_key = document.issuer_signed.device_key()?.as_jwk()?;
+
         Ok(VerifiedClaims {
-            status: document.status()?,
+            status,
             claims: document.into_claims(),
+            device_public_key,
         })
     }
 }
@@ -162,6 +170,11 @@ mod tests {
         utils::test::{issuer_x509_trust, present_dummy_mdoc},
     };
 
+    fn expected_device_public_key() -> JwkPublic {
+        let (_, device_key) = crate::utils::test::dummy_device_key();
+        device_key.as_jwk().unwrap()
+    }
+
     #[test]
     fn test_verify_successful_with_trust() {
         let verifier = Verifier::from_parts(
@@ -171,6 +184,7 @@ mod tests {
         );
 
         let device_response = present_dummy_mdoc(100, None, None);
+        let expected_device_public_key = expected_device_public_key();
 
         let expected_claims = vec![VerifiedClaims {
             claims: Claims(HashMap::from([(
@@ -178,6 +192,7 @@ mod tests {
                 HashMap::from([("lastName".into(), "Doe".into())]),
             )])),
             status: None,
+            device_public_key: expected_device_public_key,
         }];
 
         let trust = issuer_x509_trust();
@@ -222,6 +237,7 @@ mod tests {
         );
 
         let device_response = present_dummy_mdoc(100, None, None);
+        let expected_device_public_key = expected_device_public_key();
 
         let expected_claims = vec![VerifiedClaims {
             claims: Claims(HashMap::from([(
@@ -229,6 +245,7 @@ mod tests {
                 HashMap::from([("lastName".into(), "Doe".into())]),
             )])),
             status: None,
+            device_public_key: expected_device_public_key,
         }];
 
         // every Issuer is trusted (`trust` not provided)
@@ -255,6 +272,7 @@ mod tests {
             )),
             None,
         );
+        let expected_device_public_key = expected_device_public_key();
 
         let expected_claims = vec![VerifiedClaims {
             claims: Claims(HashMap::from([(
@@ -265,6 +283,7 @@ mod tests {
                 "https://example.com/status-list".parse().unwrap(),
                 74,
             )),
+            device_public_key: expected_device_public_key,
         }];
 
         // every Issuer is trusted (`trust` not provided)
@@ -292,6 +311,7 @@ mod tests {
         );
 
         let device_response = present_dummy_mdoc(100, None, Some(jwk_public));
+        let expected_device_public_key = expected_device_public_key();
 
         let expected_claims = vec![VerifiedClaims {
             claims: Claims(HashMap::from([(
@@ -299,6 +319,7 @@ mod tests {
                 HashMap::from([("lastName".into(), "Doe".into())]),
             )])),
             status: None,
+            device_public_key: expected_device_public_key,
         }];
 
         // every Issuer is trusted (`trust` not provided)
@@ -309,5 +330,24 @@ mod tests {
             .unwrap();
 
         assert_eq!(expected_claims, claims);
+    }
+
+    #[test]
+    fn test_verify_returns_device_public_key() {
+        let verifier = Verifier::from_parts(
+            "client_id".to_owned(),
+            "response_uri".to_owned(),
+            "nonce".to_owned(),
+        );
+
+        let device_response = present_dummy_mdoc(100, None, None);
+        let expected_device_public_key = expected_device_public_key();
+
+        let claims = verifier
+            .verify(device_response, 105, None, None, |_| Some(&Es256Verifier))
+            .unwrap();
+
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].device_public_key, expected_device_public_key);
     }
 }
