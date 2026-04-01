@@ -8,6 +8,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The `bh-jws-utils` dependency is bumped to version `0.6` (from `0.5`).
+
 ## [0.2.0] - 2025-09-11
 
 ### Changed
