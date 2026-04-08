@@ -15,6 +15,7 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 ### Added
 
 - Added `x5c` optional field to `StatusListTokenHeader`
+- Added `StatusListTokenHeader::unverified_from_token` function
 
 ## [0.2.1] - 2026-04-01
 

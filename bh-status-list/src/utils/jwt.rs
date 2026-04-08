@@ -33,6 +33,17 @@ pub(crate) fn sign_jwt_token(
         .foreign_boxed_err(|| Error::TokenSigningFailed)
 }
 
+/// Parses the given JWT `token` without verifying its signature.
+///
+/// # Errors
+/// The function returns [`Error::TokenParsingFailed`] if it is unable to parse
+/// the JWT token.
+pub(crate) fn parse_jwt_token_unverified(
+    token: &str,
+) -> Result<jwt::Token<StatusListTokenHeader, StatusListTokenClaims, jwt::token::Unverified<'_>>> {
+    jwt::Token::parse_unverified(token).foreign_err(|| Error::TokenParsingFailed)
+}
+
 /// Verifies the signature of the given JWT `token`.
 ///
 /// # Errors
@@ -45,9 +56,7 @@ pub(crate) fn verify_jwt_token(
     verifier: &(impl JwtVerifier + ?Sized),
     public_key: &JwkPublic,
 ) -> Result<jwt::Token<StatusListTokenHeader, StatusListTokenClaims, token::Verified>> {
-    // Parse the token (without verification).
-    let unverified_token: jwt::Token<StatusListTokenHeader, StatusListTokenClaims, _> =
-        jwt::Token::parse_unverified(token).foreign_err(|| Error::TokenParsingFailed)?;
+    let unverified_token = parse_jwt_token_unverified(token)?;
 
     // Verify the JWT signature.
 
