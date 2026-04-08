@@ -14,6 +14,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use bh_jws_utils::{jwt, JwkPublic, JwtSigner, JwtVerifier, SigningAlgorithm};
+use bhx5chain::JwtX5Chain;
 use iref::Uri;
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +39,8 @@ impl StatusListToken<token::Signed> {
     /// The arguments are as follows:
     /// - `claims`: claims of the Status List Token,
     /// - `kid`: an optional ID of the private key used to sign the token,
+    /// - `x5c`: an optional X.509 certificate chain corresponding to the key
+    ///   used to sign the token,
     /// - `key`: an implementation of the algorithm used to sign the token with
     ///   the specific private key.
     ///
@@ -48,6 +51,7 @@ impl StatusListToken<token::Signed> {
     pub fn new(
         claims: StatusListTokenClaims,
         kid: Option<String>,
+        x5c: Option<JwtX5Chain>,
         key: &impl JwtSigner,
     ) -> Result<Self> {
         let alg = key.algorithm();
@@ -55,6 +59,7 @@ impl StatusListToken<token::Signed> {
         let header = StatusListTokenHeader {
             alg,
             kid,
+            x5c,
             typ: STATUS_LIST_TOKEN_TYP.to_owned(),
         };
 
@@ -150,6 +155,11 @@ pub struct StatusListTokenHeader {
     /// An optional ID of the private key used to sign the token.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kid: Option<String>,
+
+    /// An optional X.509 certificate chain corresponding to the key used to
+    /// sign the token.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x5c: Option<JwtX5Chain>,
 
     /// Type of the JWT, which is always _`statuslist+jwt`_.
     pub typ: String,
@@ -297,6 +307,7 @@ mod tests {
         json_object, BoxError,
         SigningAlgorithm::{self, *},
     };
+    use bhx5chain::JwtX5Chain;
 
     use super::*;
     use crate::{JwtError, StatusBits, StatusListInternal};
@@ -340,33 +351,38 @@ mod tests {
     }
 
     fn get_valid_jwt(alg: SigningAlgorithm, iss: UriBuf, sub: UriBuf, exp: Option<u64>) -> String {
-        let status_list = StatusListInternal::new(StatusBits::Eight, Option::None);
+        let status_list = StatusListInternal::new(StatusBits::Eight, None);
 
-        let claims =
-            StatusListTokenClaims::new(iss, sub, 100, exp, Option::None, status_list.into());
+        let claims = StatusListTokenClaims::new(iss, sub, 100, exp, None, status_list.into());
 
-        let token_signed =
-            StatusListToken::new(claims, Some("kid".to_owned()), &DummySigner(alg, true)).unwrap();
+        let token_signed = StatusListToken::new(
+            claims,
+            Some("kid".to_owned()),
+            None,
+            &DummySigner(alg, true),
+        )
+        .unwrap();
 
         token_signed.to_string()
     }
 
     #[test]
     fn test_status_list_token_signing_fails() {
-        let status_list = StatusListInternal::new(StatusBits::Eight, Option::None);
+        let status_list = StatusListInternal::new(StatusBits::Eight, None);
 
         let claims = StatusListTokenClaims::new(
             str_to_uri("http://iss"),
             str_to_uri("http://sub"),
             100,
-            Option::None,
-            Option::None,
+            None,
+            None,
             status_list.into(),
         );
 
-        let err = StatusListToken::new(claims, Some("kid".to_owned()), &DummySigner(Es512, false))
-            .err()
-            .unwrap();
+        let err =
+            StatusListToken::new(claims, Some("kid".to_owned()), None, &DummySigner(Es512, false))
+                .err()
+                .unwrap();
 
         assert!(matches!(err.error, Error::TokenSigningFailed));
     }
@@ -385,29 +401,51 @@ mod tests {
         );
 
         let _token =
-            StatusListToken::new(claims, Some("kid".to_owned()), &DummySigner(Es256, true))
+            StatusListToken::new(claims, Some("kid".to_owned()), None, &DummySigner(Es256, true))
                 .unwrap();
     }
 
     #[test]
     fn test_status_list_token_new_without_kid_success() {
-        let status_list = StatusListInternal::new(StatusBits::Two, Option::None);
+        let status_list = StatusListInternal::new(StatusBits::Two, None);
 
         let claims = StatusListTokenClaims::new(
             str_to_uri("http://iss"),
             str_to_uri("http://sub"),
             100,
-            Option::None,
-            Option::None,
+            None,
+            None,
             status_list.into(),
         );
 
-        let _token = StatusListToken::new(claims, None, &DummySigner(Es256, true)).unwrap();
+        let _token = StatusListToken::new(claims, None, None, &DummySigner(Es256, true)).unwrap();
+    }
+
+    #[test]
+    fn test_status_list_token_new_with_x5c_success() {
+        let status_list = StatusListInternal::new(StatusBits::Two, None);
+
+        let claims = StatusListTokenClaims::new(
+            str_to_uri("http://iss"),
+            str_to_uri("http://sub"),
+            100,
+            None,
+            None,
+            status_list.into(),
+        );
+
+        let _token = StatusListToken::new(
+            claims,
+            Some("kid".to_owned()),
+            Some(JwtX5Chain::dummy()),
+            &DummySigner(Es256, true),
+        )
+        .unwrap();
     }
 
     #[test]
     fn test_status_list_token_verify_success() {
-        let status_list = StatusListInternal::new(StatusBits::One, Option::None);
+        let status_list = StatusListInternal::new(StatusBits::One, None);
 
         let iss = str_to_uri("http://iss");
         let sub = str_to_uri("http://sub");
@@ -417,14 +455,19 @@ mod tests {
             iss.clone(),
             sub.clone(),
             iat,
-            Option::None,
-            Option::None,
+            None,
+            None,
             status_list.into(),
         );
 
-        let token_signed =
-            StatusListToken::new(claims, Some("kid".to_owned()), &DummySigner(Es512, true))
-                .unwrap();
+        let jwt_x5chain = JwtX5Chain::dummy();
+        let token_signed = StatusListToken::new(
+            claims,
+            Some("kid".to_owned()),
+            Some(jwt_x5chain.clone()),
+            &DummySigner(Es512, true),
+        )
+        .unwrap();
 
         let token_verified = StatusListToken::verify(
             token_signed.as_str(),
@@ -440,6 +483,7 @@ mod tests {
 
         assert_eq!(header.alg, Es512);
         assert_eq!(header.kid, Some("kid".to_owned()));
+        assert_eq!(header.x5c, Some(jwt_x5chain));
         assert_eq!(header.typ, STATUS_LIST_TOKEN_TYP);
 
         assert_eq!(claims.iss, iss);

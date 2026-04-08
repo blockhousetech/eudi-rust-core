@@ -12,6 +12,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 - Change `kid` field in `StatusListTokenHeader` from mandatory to optional.
 
+### Added
+
+- Added `x5c` optional field to `StatusListTokenHeader`
+
 ## [0.2.1] - 2026-04-01
 
 ### Changed
