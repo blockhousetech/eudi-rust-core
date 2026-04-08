@@ -37,7 +37,7 @@ impl StatusListToken<token::Signed> {
     ///
     /// The arguments are as follows:
     /// - `claims`: claims of the Status List Token,
-    /// - `kid`: an ID of the private key used to sign the token,
+    /// - `kid`: an optional ID of the private key used to sign the token,
     /// - `key`: an implementation of the algorithm used to sign the token with
     ///   the specific private key.
     ///
@@ -45,7 +45,11 @@ impl StatusListToken<token::Signed> {
     ///
     /// If the signature fails to compute, the [`Error::TokenSigningFailed`]
     /// will be returned.
-    pub fn new(claims: StatusListTokenClaims, kid: String, key: &impl JwtSigner) -> Result<Self> {
+    pub fn new(
+        claims: StatusListTokenClaims,
+        kid: Option<String>,
+        key: &impl JwtSigner,
+    ) -> Result<Self> {
         let alg = key.algorithm();
 
         let header = StatusListTokenHeader {
@@ -143,8 +147,9 @@ pub struct StatusListTokenHeader {
     /// An algorithm used to sign the token.
     pub alg: SigningAlgorithm,
 
-    /// An ID of the private key used to sign the token.
-    pub kid: String,
+    /// An optional ID of the private key used to sign the token.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kid: Option<String>,
 
     /// Type of the JWT, which is always _`statuslist+jwt`_.
     pub typ: String,
@@ -341,7 +346,7 @@ mod tests {
             StatusListTokenClaims::new(iss, sub, 100, exp, Option::None, status_list.into());
 
         let token_signed =
-            StatusListToken::new(claims, "kid".to_owned(), &DummySigner(alg, true)).unwrap();
+            StatusListToken::new(claims, Some("kid".to_owned()), &DummySigner(alg, true)).unwrap();
 
         token_signed.to_string()
     }
@@ -359,7 +364,7 @@ mod tests {
             status_list.into(),
         );
 
-        let err = StatusListToken::new(claims, "kid".to_owned(), &DummySigner(Es512, false))
+        let err = StatusListToken::new(claims, Some("kid".to_owned()), &DummySigner(Es512, false))
             .err()
             .unwrap();
 
@@ -368,6 +373,24 @@ mod tests {
 
     #[test]
     fn test_status_list_token_new_success() {
+        let status_list = StatusListInternal::new(StatusBits::Two, None);
+
+        let claims = StatusListTokenClaims::new(
+            str_to_uri("http://iss"),
+            str_to_uri("http://sub"),
+            100,
+            None,
+            None,
+            status_list.into(),
+        );
+
+        let _token =
+            StatusListToken::new(claims, Some("kid".to_owned()), &DummySigner(Es256, true))
+                .unwrap();
+    }
+
+    #[test]
+    fn test_status_list_token_new_without_kid_success() {
         let status_list = StatusListInternal::new(StatusBits::Two, Option::None);
 
         let claims = StatusListTokenClaims::new(
@@ -379,8 +402,7 @@ mod tests {
             status_list.into(),
         );
 
-        let _token =
-            StatusListToken::new(claims, "kid".to_owned(), &DummySigner(Es256, true)).unwrap();
+        let _token = StatusListToken::new(claims, None, &DummySigner(Es256, true)).unwrap();
     }
 
     #[test]
@@ -401,7 +423,8 @@ mod tests {
         );
 
         let token_signed =
-            StatusListToken::new(claims, "kid".to_owned(), &DummySigner(Es512, true)).unwrap();
+            StatusListToken::new(claims, Some("kid".to_owned()), &DummySigner(Es512, true))
+                .unwrap();
 
         let token_verified = StatusListToken::verify(
             token_signed.as_str(),
@@ -416,7 +439,7 @@ mod tests {
         let (header, claims) = token_verified.into();
 
         assert_eq!(header.alg, Es512);
-        assert_eq!(header.kid, "kid");
+        assert_eq!(header.kid, Some("kid".to_owned()));
         assert_eq!(header.typ, STATUS_LIST_TOKEN_TYP);
 
         assert_eq!(claims.iss, iss);
