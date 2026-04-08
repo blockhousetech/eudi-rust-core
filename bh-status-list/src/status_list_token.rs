@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     token,
-    utils::jwt::{sign_jwt_token, verify_jwt_token},
+    utils::jwt::{parse_jwt_token_unverified, sign_jwt_token, verify_jwt_token},
     Error, Result, StatusList, UriBuf,
 };
 
@@ -55,6 +55,8 @@ impl StatusListToken<token::Signed> {
         key: &impl JwtSigner,
     ) -> Result<Self> {
         let alg = key.algorithm();
+
+        // TODO: verify x5c leaf key is the JWT signing key
 
         let header = StatusListTokenHeader {
             alg,
@@ -166,6 +168,26 @@ pub struct StatusListTokenHeader {
 }
 
 impl StatusListTokenHeader {
+    /// Parses a Status List Token header without verifying the token
+    /// signature.
+    ///
+    /// The intended usage of this function is to call it before the `StatusListToken::verify`
+    /// function so that the caller can inspect the `kid` and `x5c` values from the header,
+    /// choose a public-key retrieval strategy, and then call the `verify` function with the
+    /// fetched key.
+    ///
+    /// The header `typ` claim is still validated to ensure the token is a
+    /// Status List Token.
+    pub fn unverified_from_token(token: &str) -> Result<StatusListTokenHeader> {
+        let token = parse_jwt_token_unverified(token)?;
+
+        token.header().verify()?;
+
+        let (header, _) = token.into();
+
+        Ok(header)
+    }
+
     /// Verifies the header of the Status List Token.
     ///
     /// The only step is checking if the `typ` claim is set to `statuslist+jwt`.
@@ -358,7 +380,7 @@ mod tests {
         let token_signed = StatusListToken::new(
             claims,
             Some("kid".to_owned()),
-            None,
+            Some(JwtX5Chain::dummy()),
             &DummySigner(alg, true),
         )
         .unwrap();
@@ -379,10 +401,14 @@ mod tests {
             status_list.into(),
         );
 
-        let err =
-            StatusListToken::new(claims, Some("kid".to_owned()), None, &DummySigner(Es512, false))
-                .err()
-                .unwrap();
+        let err = StatusListToken::new(
+            claims,
+            Some("kid".to_owned()),
+            None,
+            &DummySigner(Es512, false),
+        )
+        .err()
+        .unwrap();
 
         assert!(matches!(err.error, Error::TokenSigningFailed));
     }
@@ -400,9 +426,13 @@ mod tests {
             status_list.into(),
         );
 
-        let _token =
-            StatusListToken::new(claims, Some("kid".to_owned()), None, &DummySigner(Es256, true))
-                .unwrap();
+        let _token = StatusListToken::new(
+            claims,
+            Some("kid".to_owned()),
+            None,
+            &DummySigner(Es256, true),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -492,6 +522,23 @@ mod tests {
     }
 
     #[test]
+    fn test_status_list_token_parse_unverified_header_success() {
+        let jwt = get_valid_jwt(
+            Es256,
+            str_to_uri("http://iss"),
+            str_to_uri("http://sub"),
+            None,
+        );
+
+        let header = StatusListTokenHeader::unverified_from_token(&jwt).unwrap();
+
+        assert_eq!(header.alg, Es256);
+        assert_eq!(header.kid, Some("kid".to_owned()));
+        assert_eq!(header.x5c, Some(JwtX5Chain::dummy()));
+        assert_eq!(header.typ, STATUS_LIST_TOKEN_TYP);
+    }
+
+    #[test]
     fn test_status_list_token_verify_parse_fails() {
         let err = StatusListToken::verify(
             "invalid-token",
@@ -508,11 +555,40 @@ mod tests {
     }
 
     #[test]
+    fn test_status_list_token_parse_unverified_header_invalid_typ_fails() {
+        let status_list = StatusListInternal::new(StatusBits::Eight, None);
+        let claims = StatusListTokenClaims::new(
+            str_to_uri("http://iss"),
+            str_to_uri("http://sub"),
+            100,
+            None,
+            None,
+            status_list.into(),
+        );
+        let header = StatusListTokenHeader {
+            alg: Es256,
+            kid: Some("kid".to_owned()),
+            x5c: None,
+            typ: "not-status-list".to_owned(),
+        };
+        let jwt = sign_jwt_token(header, claims, &DummySigner(Es256, true))
+            .unwrap()
+            .as_str()
+            .to_owned();
+
+        let err = StatusListTokenHeader::unverified_from_token(&jwt)
+            .err()
+            .unwrap();
+
+        assert!(matches!(err.error, Error::InvalidTokenHeaderTyp(typ) if typ == "not-status-list"));
+    }
+
+    #[test]
     fn test_status_list_token_verify_invalid_alg_fails() {
         let iss = str_to_uri("http://iss");
         let sub = str_to_uri("http://sub");
 
-        let jwt = get_valid_jwt(Ps512, iss.clone(), sub.clone(), Option::None);
+        let jwt = get_valid_jwt(Ps512, iss.clone(), sub.clone(), None);
 
         let err = StatusListToken::verify(
             &jwt,
@@ -533,7 +609,7 @@ mod tests {
         let iss = str_to_uri("http://iss");
         let sub = str_to_uri("http://sub");
 
-        let jwt = get_valid_jwt(Ps384, iss.clone(), sub.clone(), Option::None);
+        let jwt = get_valid_jwt(Ps384, iss.clone(), sub.clone(), None);
 
         let err = StatusListToken::verify(
             &jwt,
@@ -554,7 +630,7 @@ mod tests {
         let iss = str_to_uri("http://iss");
         let sub = str_to_uri("http://sub");
 
-        let jwt = get_valid_jwt(Ps384, iss.clone(), sub.clone(), Option::None);
+        let jwt = get_valid_jwt(Ps384, iss.clone(), sub.clone(), None);
 
         let err = StatusListToken::verify(
             &jwt,
@@ -577,7 +653,7 @@ mod tests {
 
         let iss_invalid = str_to_uri("http://iss-invalid");
 
-        let jwt = get_valid_jwt(Es512, iss_invalid.clone(), sub.clone(), Option::None);
+        let jwt = get_valid_jwt(Es512, iss_invalid.clone(), sub.clone(), None);
 
         let err = StatusListToken::verify(
             &jwt,
@@ -602,7 +678,7 @@ mod tests {
 
         let sub_invalid = str_to_uri("http://sub-invalid");
 
-        let jwt = get_valid_jwt(Es256, iss.clone(), sub_invalid.clone(), Option::None);
+        let jwt = get_valid_jwt(Es256, iss.clone(), sub_invalid.clone(), None);
 
         let err = StatusListToken::verify(
             &jwt,
