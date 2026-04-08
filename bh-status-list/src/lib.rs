@@ -95,7 +95,7 @@
 //!             status_list.status_list().clone(),
 //!         );
 //!         let status_list_token =
-//!             StatusListToken::new(status_list_claims, "example_kid".to_string(), &self.0)
+//!             StatusListToken::new(status_list_claims, Some("example_kid".to_string()), &self.0)
 //!                 .unwrap();
 //!
 //!         Ok(StatusListResponse::Jwt(
