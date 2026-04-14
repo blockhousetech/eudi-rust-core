@@ -8,6 +8,12 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-04-14
+
+### Changed
+
+- The `bh-status-list` dependency is bumped to version `0.3` (from `0.2`).
+
 ## [0.5.0] - 2026-03-11
 
 ### Changed
@@ -66,7 +72,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - README.md describing the crate.
 - Initial version of the `bh-sd-jwt` crate.
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-sd-jwt/v0.5.0...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-sd-jwt/v0.5.1...HEAD>
+[0.5.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.5.1>
 [0.5.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.5.0>
 [0.4.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.4.1>
 [0.4.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.4.0>
