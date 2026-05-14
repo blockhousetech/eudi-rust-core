@@ -206,6 +206,11 @@ impl Device {
         self.issuer_signed.issuer_auth.validity_info()
     }
 
+    /// Returns the signed [`DeviceKey`] of the respective `mdoc` Device.
+    pub fn device_key(&self) -> Result<DeviceKey> {
+        self.issuer_signed.device_key()
+    }
+
     /// Get the pointer to the credential's status.
     ///
     /// For more information, take a look at the [Token Status List (TSL)][1].

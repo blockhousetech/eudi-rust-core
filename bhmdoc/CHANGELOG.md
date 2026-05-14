@@ -8,6 +8,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added the `Device::device_key` function.
+
 ## [0.6.2] - 2026-04-14
 
 ### Changed
