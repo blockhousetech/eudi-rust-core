@@ -125,9 +125,9 @@ impl Disclosure {
     /// Construct a new [`Disclosure`] from the given `salt`, `claim_name` and `claim_value`.
     pub fn new(salt: String, claim_name: Option<String>, claim_value: Value) -> Self {
         let input = if let Some(name) = &claim_name {
-            format!("[\"{}\", \"{}\", {}]", &salt, &name, &claim_value)
+            format!("[\"{}\", \"{}\", {}]", salt, name, claim_value)
         } else {
-            format!("[\"{}\", {}]", &salt, &claim_value)
+            format!("[\"{}\", {}]", salt, claim_value)
         };
 
         let encoded = bh_jws_utils::base64_url_encode(input);
