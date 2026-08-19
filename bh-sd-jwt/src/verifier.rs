@@ -416,6 +416,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn key_binding_missing_cnf_claim() {
+        let iat = 100;
+        let issuer_jwt = IssuerJwt::new(
+            "TestCredential".into(),
+            dummy_https_iss(),
+            None,
+            dummy_claims(),
+        )
+        .unwrap();
+        let holder = test_holder(issuer_jwt, StubVerifier::default(), iat).await;
+
+        let verifier = test_verifier();
+        let challenge = verifier.key_binding_challenge();
+        let presentation = holder
+            .present(&[], challenge.clone(), iat, &StubSigner::default())
+            .unwrap();
+
+        let signature_verifier = StubVerifier::default();
+        let result = verifier
+            .verify(
+                presentation,
+                &dummy_public_key_lookup(),
+                iat,
+                dummy_hasher_factory,
+                |_| Some(&signature_verifier),
+            )
+            .await;
+
+        assert_eq!(
+            result.unwrap_err().error,
+            VerifierError::KeyBinding(KBError::MissingCnfClaim)
+        );
+    }
+
+    #[tokio::test]
     async fn key_binding_expired() {
         let iat = 100;
         let holder = test_holder(test_issuer_jwt(), StubVerifier::default(), iat).await;
@@ -524,7 +559,7 @@ mod tests {
         let mut issuer_jwt = IssuerJwt::new(
             "TestCredential".into(),
             dummy_https_iss(),
-            dummy_public_jwk(),
+            Some(dummy_public_jwk()),
             dummy_claims(),
         )
         .unwrap();
@@ -563,7 +598,7 @@ mod tests {
         let mut issuer_jwt = IssuerJwt::new(
             "TestCredential".into(),
             dummy_https_iss(),
-            dummy_public_jwk(),
+            Some(dummy_public_jwk()),
             dummy_claims(),
         )
         .unwrap();

@@ -25,7 +25,7 @@ use bherror::{
 };
 use bhx5chain::JwtX5Chain;
 use rand_core::CryptoRngCore;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{
     encoder, error::FormatError, iref::UriBuf, utils::check_claim_names_object,
@@ -213,8 +213,16 @@ pub struct IssuerJwt {
 
     /// Holder's public JWK for key binding purposes.
     ///
-    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-01#section-3.2.2.2-3.5.2.1)
-    pub cnf: CnfClaim,
+    /// OPTIONAL unless cryptographic Key Binding is
+    /// to be supported, in which case it is REQUIRED.
+    ///
+    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-18#section-2.2.2.3-3.4)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_cnf"
+    )]
+    pub cnf: Option<CnfClaim>,
 
     /// Verifiable credential type. Case-sensitive `StringOrUri` Collision-Resistant Name.
     ///
@@ -253,15 +261,20 @@ impl IssuerJwt {
     /// Create a new JWT with registered claims marked required by the
     /// [interoperability profile].
     ///
+    /// Providing `holder_binding_public_jwk` as Some(_) creates a
+    /// registered claim `cnf` identifying the proof of possesion key.
+    /// See [SD-JWT-VC-cnf].
+    ///
     /// Note: `claims` should not contain any registered claim name (_`iss`_,
     /// _`nbf`_, _`exp`_, _`cnf`_, _`vct`_, _`status`_), and an error is
     /// returned if it does.
     ///
     /// [interoperability profile]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-01#name-registered-jwt-claims
+    /// [SD-JWT-VC-cnf]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-18#section-2.2.2.3-3.4
     pub fn new(
         vct: String,
         iss: UriBuf,
-        holder_binding_public_jwk: JwkPublic,
+        holder_binding_public_jwk: Option<JwkPublic>,
         claims: JsonObject,
     ) -> Result<Self> {
         if let Some(name) = check_claim_names_object(
@@ -273,13 +286,14 @@ impl IssuerJwt {
                 IssuerError::ReservedOrRegisteredClaimName(name),
             ));
         }
+
+        let cnf = holder_binding_public_jwk.map(|jwk| CnfClaim { jwk });
+
         Ok(Self {
             iss: iss.to_string(),
             nbf: None,
             exp: None,
-            cnf: CnfClaim {
-                jwk: holder_binding_public_jwk,
-            },
+            cnf,
             vct,
             status: None,
             sd_alg: None,
@@ -388,6 +402,13 @@ impl IssuerJwt {
     }
 }
 
+fn deserialize_cnf<'de, D>(deserializer: D) -> std::result::Result<Option<CnfClaim>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    CnfClaim::deserialize(deserializer).map(Some)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use std::str::FromStr;
@@ -461,7 +482,7 @@ pub(crate) mod tests {
         IssuerJwt::new(
             "TestCredential".into(),
             dummy_https_iss(),
-            dummy_public_jwk(),
+            Some(dummy_public_jwk()),
             dummy_claims(),
         )
         .unwrap()
@@ -488,12 +509,11 @@ pub(crate) mod tests {
         issuer_jwt: IssuerJwt,
         disclosure_paths: &[&JsonNodePath],
     ) -> IssuedSdJwt {
-        let public_jwk = issuer_jwt.cnf.jwk.clone();
         Issuer::new(Sha256)
             .issue(
                 issuer_jwt,
                 disclosure_paths,
-                &StubSigner::new(public_jwk, X5Chain::dummy()),
+                &StubSigner::new(dummy_public_jwk(), X5Chain::dummy()),
                 &mut rand::thread_rng(),
             )
             .expect("Issuing failed")
@@ -661,7 +681,7 @@ pub(crate) mod tests {
             let result = IssuerJwt::new(
                 "TestCredential".into(),
                 dummy_https_iss(),
-                dummy_public_jwk(),
+                Some(dummy_public_jwk()),
                 model,
             );
 
@@ -677,7 +697,7 @@ pub(crate) mod tests {
         let issuer_jwt = IssuerJwt::new(
             "TestCredential".into(),
             dummy_https_iss(),
-            dummy_public_jwk(),
+            Some(dummy_public_jwk()),
             json_object!({
                 "sub": sub,
             }),
@@ -723,5 +743,55 @@ pub(crate) mod tests {
         // make sure sd_alg deserializes correctly
         let deserialized: IssuerJwt = serde_json::from_value(serialized).unwrap();
         assert_eq!(deserialized.sd_alg, jwt.sd_alg);
+    }
+
+    #[test]
+    fn cnf_is_omitted_when_key_binding_is_not_supported() {
+        let jwt = IssuerJwt::new(
+            "TestCredential".into(),
+            dummy_https_iss(),
+            None,
+            dummy_claims(),
+        )
+        .unwrap();
+
+        assert_eq!(jwt.cnf, None);
+
+        let serialized = serde_json::to_value(&jwt).unwrap();
+        assert!(!serialized.as_object().unwrap().contains_key("cnf"));
+
+        let deserialized: IssuerJwt = serde_json::from_value(serialized).unwrap();
+        assert_eq!(deserialized, jwt);
+    }
+
+    #[test]
+    fn cnf_null_valus_is_invalid() {
+        let jwt = IssuerJwt::new(
+            "TestCredential".into(),
+            dummy_https_iss(),
+            None,
+            dummy_claims(),
+        )
+        .unwrap();
+
+        let mut serialized = serde_json::to_value(&jwt).unwrap();
+        serialized
+            .as_object_mut()
+            .unwrap()
+            .insert("cnf".to_owned(), serde_json::Value::Null);
+
+        let result = serde_json::from_value::<IssuerJwt>(serialized);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn cnf_round_trips_when_key_binding_is_supported() {
+        let jwt = test_issuer_jwt();
+
+        let serialized = serde_json::to_value(&jwt).unwrap();
+        assert!(serialized.as_object().unwrap().contains_key("cnf"));
+
+        let deserialized: IssuerJwt = serde_json::from_value(serialized).unwrap();
+        assert_eq!(deserialized, jwt);
     }
 }

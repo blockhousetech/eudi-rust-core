@@ -233,7 +233,7 @@ fn issuer(signer: &Es256SignerWithChain, key_binding_public_key: JwkPublic) -> S
         serde_json::to_string_pretty(&claims).unwrap(),
     );
 
-    let mut jwt_payload = IssuerJwt::new(vct, iss(), key_binding_public_key, claims).unwrap();
+    let mut jwt_payload = IssuerJwt::new(vct, iss(), Some(key_binding_public_key), claims).unwrap();
 
     jwt_payload.add_iat_claim(IAT);
     jwt_payload.exp = Some(EXP);
