@@ -298,8 +298,8 @@ impl SdJwtDecoded {
         self.decoded_claims
     }
 
-    pub(crate) fn key_binding_public_key(&self) -> &JwkPublic {
-        &self.decoded_claims.cnf.jwk
+    pub(crate) fn key_binding_public_key(&self) -> Option<&JwkPublic> {
+        self.decoded_claims.cnf.as_ref().map(|cnf| &cnf.jwk)
     }
 
     pub(crate) fn hasher(&self) -> &dyn Hasher {

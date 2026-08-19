@@ -34,9 +34,9 @@ use crate::{
 /// Error type related to Key Binding `JWT` operations.
 #[derive(strum_macros::Display, PartialEq, Debug, Clone)]
 pub enum KBError {
-    /// Error representing a missing key binding in the `SD-JWT`.
-    #[strum(to_string = "Missing key binding")]
-    MissingKeyBinding,
+    /// Error representing a missing `cnf` claim in the `SD-JWT+KB`.
+    #[strum(to_string = "Missing `cnf` claim. Claim `cnf` is REQUIRED in SD-JWT+KB.")]
+    MissingCnfClaim,
 
     /// Error when the Key Binding JWT syntax is invalid.
     #[strum(to_string = "Invalid KBJwt syntax: {0}")]
@@ -428,11 +428,16 @@ impl SdJwtKB {
     pub(crate) fn verify_key_binding_jwt<'a>(
         &self,
         hasher: impl Hasher,
-        holder_public_key: &JwkPublic,
+        holder_public_key: Option<&JwkPublic>,
         challenge: &KeyBindingChallenge,
         current_time: SecondsSinceEpoch,
         get_signature_verifier: impl FnOnce(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
     ) -> VerifierResult<KBJwt<jwt::token::Verified>> {
+        let Some(holder_public_key) = holder_public_key else {
+            return Err(Error::root(VerifierError::KeyBinding(
+                KBError::MissingCnfClaim,
+            )));
+        };
         let kb_jwt = &self.key_binding_jwt;
 
         let sd_hash = sd_hash(&self.sd_jwt, hasher);
