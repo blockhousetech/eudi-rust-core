@@ -33,7 +33,7 @@ pub(crate) const SD_JWT_DELIMITER: &str = "~";
 /// Instance of an `SD-JWT` can be turned into `SD-JWT+KB` by adding a Key Binding
 /// JWT (KB-JWT) to the instance.
 #[derive(Debug)]
-pub(crate) struct SdJwt {
+pub struct SdJwt {
     pub(crate) jwt: String,
     pub(crate) disclosures: Vec<String>,
 }

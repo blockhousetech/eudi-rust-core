@@ -367,7 +367,7 @@ pub(crate) mod tests {
     use crate::{
         issuer::tests::{test_issuer_jwt, test_sd_jwt, TEST_DISCLOSURE_PATHS},
         test_utils::{
-            dummy_hasher_factory, dummy_key_binding_audience, header_public_key_lookup,
+            dummy_hasher_factory, header_public_key_lookup,
             symbolic_crypto::{StubSigner, StubVerifier},
         },
     };
@@ -389,16 +389,10 @@ pub(crate) mod tests {
         .expect("SD-JWT import failed")
     }
 
-    fn dummy_key_binding_challenge() -> KeyBindingChallenge {
-        KeyBindingChallenge {
-            aud: dummy_key_binding_audience(),
-            nonce: "babadeda".into(),
-        }
-    }
-
     mod unit {
 
         use super::*;
+        use crate::test_utils::dummy_key_binding_challenge;
         use crate::{
             issuer::tests::TEST_DISCLOSURE_PATHS, test_utils::failing_public_key_lookup, Disclosure,
         };

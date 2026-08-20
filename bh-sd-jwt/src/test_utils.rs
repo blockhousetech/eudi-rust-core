@@ -18,8 +18,8 @@ use bherror::Error;
 use serde_json::json;
 
 use crate::{
-    into_object, Hasher, HashingAlgorithm, IssuerJwtHeader, IssuerPublicKeyLookup, Sha256,
-    SignatureError,
+    into_object, Hasher, HashingAlgorithm, IssuerJwtHeader, IssuerPublicKeyLookup,
+    KeyBindingChallenge, Sha256, SignatureError,
 };
 pub(crate) mod symbolic_crypto;
 
@@ -92,4 +92,11 @@ pub(crate) fn dummy_hasher_factory(algorithm: HashingAlgorithm) -> Option<Box<dy
 
 pub(crate) fn dummy_key_binding_audience() -> String {
     "http://example.com/dummy_sd_jwt_verifier".into()
+}
+
+pub(crate) fn dummy_key_binding_challenge() -> KeyBindingChallenge {
+    KeyBindingChallenge {
+        aud: dummy_key_binding_audience(),
+        nonce: "babadeda".into(),
+    }
 }

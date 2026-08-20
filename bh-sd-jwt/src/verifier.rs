@@ -19,6 +19,8 @@ use bh_jws_utils::{base64_url_encode, JwkPublic, SignatureVerifier, SigningAlgor
 use bherror::traits::PropagateError;
 use rand_core::CryptoRngCore;
 
+use crate::SdJwt;
+use crate::SdJwtDecoded;
 use crate::{
     error::{FormatError, SignatureError},
     key_binding::{KBError, KeyBindingChallenge},
@@ -196,15 +198,13 @@ impl Verifier {
         get_hasher: impl Fn(HashingAlgorithm) -> Option<Box<dyn Hasher>>,
         get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
     ) -> Result<(IssuerJwt, SigningAlgorithm, JwkPublic)> {
-        let (verified_sd_jwt, signing_algorithm, issuer_public_key) = sd_jwt_kb
-            .sd_jwt
-            .to_signature_verified_sd_jwt(issuer_public_key_lookup, &get_signature_verifier)
-            .await
-            .match_err(|crate_error| crate_error.to_verifier_error())?;
-
-        let decoded_sd_jwt = verified_sd_jwt
-            .into_decoded(get_hasher)
-            .match_err(|crate_error| crate_error.to_verifier_error())?;
+        let (decoded_sd_jwt, signing_algorithm, issuer_public_key) = decode_sd_jwt(
+            &sd_jwt_kb.sd_jwt,
+            issuer_public_key_lookup,
+            get_hasher,
+            &get_signature_verifier,
+        )
+        .await?;
 
         sd_jwt_kb.verify_key_binding_jwt(
             decoded_sd_jwt.hasher(),
@@ -221,6 +221,102 @@ impl Verifier {
 
         Ok((claims, signing_algorithm, issuer_public_key))
     }
+}
+
+/// Verifier of SD-JWT verifiable presentation.
+///
+/// This verifier does NOT require Key Binding. Note that the decision
+/// whether to require Key Binding for a particular use case **MUST NOT**
+/// be based on whether a Key Binding JWT is provided by the Holder or not,
+/// according to [official documentation].
+///
+/// [official documentation]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-selective-disclosure-jwt-13#section-7.3-4.1
+pub struct NoHolderBindingVerifier;
+
+impl NoHolderBindingVerifier {
+    /// Verify the provided SD-JWT presentation, returning the reconstructed
+    /// payload, an algorithm used to sign the JWT, and the resolved public key
+    /// of the SD-JWT Issuer in the JWK format.
+    ///
+    /// This function does not check cryptographic Holder Key Binding and therefore does not prove:
+    ///     - possesion by the intended Holder,
+    ///     - presentation freshness,
+    ///     - replay resistance.
+    ///
+    /// For more see [1].
+    ///
+    /// # Cryptography
+    ///
+    /// The caller needs to provide an implementation of a [`Hasher`] for every
+    /// algorithm they want to support, using the `get_hasher` argument. If the
+    /// received payload uses an algorithm whose [`Hasher`] the caller did not
+    /// provide, an error will be returned.
+    ///
+    /// # Arguments
+    /// - `sd_jwt`: SD-JWT presentation to verify,
+    ///
+    /// - `issuer_public_key_lookup`: an implementation of the interface
+    ///   capable of resolving the issuer's public key based on the `iss`
+    ///   claim of the `JWT` and its header (see [`IssuerPublicKeyLookup`]),
+    ///
+    /// - `get_hasher`: a function that returns an instance of a [`Hasher`]
+    ///   based on the provided [`HashingAlgorithm`], or `None` if it is not
+    ///   supported,
+    ///
+    /// - `get_signature_verifier`: a function that returns an implementation
+    ///   of a [`SignatureVerifier`] based on the provided [`SigningAlgorithm`],
+    ///   or `None` if it is not supported.
+    ///
+    /// # Notes
+    /// - The caller needs to support at least `SHA-256` hashing algorithm, as
+    ///   specified [here].
+    ///
+    /// [here]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-selective-disclosure-jwt-07#section-5.1.1-3
+    /// [1]: https://datatracker.ietf.org/doc/html/rfc9901#name-key-binding-2
+    pub async fn verify<'a>(
+        self,
+        sd_jwt: SdJwt,
+        issuer_public_key_lookup: &impl IssuerPublicKeyLookup,
+        current_time: SecondsSinceEpoch,
+        get_hasher: impl Fn(HashingAlgorithm) -> Option<Box<dyn Hasher>>,
+        get_signature_verifier: impl Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
+    ) -> Result<(IssuerJwt, SigningAlgorithm, JwkPublic)> {
+        let (decoded_sd_jwt, signing_algorithm, issuer_public_key) = decode_sd_jwt(
+            &sd_jwt,
+            issuer_public_key_lookup,
+            get_hasher,
+            &get_signature_verifier,
+        )
+        .await?;
+
+        let claims = decoded_sd_jwt.into_claims();
+
+        // Validate the additional `SD-JWT-VC` claims
+        claims.validate_claims_verifier(current_time)?;
+
+        Ok((claims, signing_algorithm, issuer_public_key))
+    }
+}
+
+async fn decode_sd_jwt<'a, F>(
+    sd_jwt: &SdJwt,
+    issuer_public_key_lookup: &impl IssuerPublicKeyLookup,
+    get_hasher: impl Fn(HashingAlgorithm) -> Option<Box<dyn Hasher>>,
+    get_signature_verifier: &F,
+) -> Result<(SdJwtDecoded, SigningAlgorithm, JwkPublic)>
+where
+    F: Fn(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier> + ?Sized,
+{
+    let (verified_sd_jwt, signing_algorithm, issuer_public_key) = sd_jwt
+        .to_signature_verified_sd_jwt(issuer_public_key_lookup, &get_signature_verifier)
+        .await
+        .match_err(|crate_error| crate_error.to_verifier_error())?;
+
+    let decoded_sd_jwt = verified_sd_jwt
+        .into_decoded(get_hasher)
+        .match_err(|crate_error| crate_error.to_verifier_error())?;
+
+    Ok((decoded_sd_jwt, signing_algorithm, issuer_public_key))
 }
 
 /// Generates a `nonce` value.
@@ -639,6 +735,7 @@ mod tests {
         use JsonNodePathSegment::*;
 
         use super::*;
+        use crate::test_utils::dummy_key_binding_challenge;
         use crate::{
             issuer::tests::{test_issuer_jwt, TEST_DISCLOSURE_PATHS as TEST_PATHS},
             paths_exist,
@@ -837,9 +934,55 @@ mod tests {
                 for not_to_be_disclosed_path in *not_to_be_disclosed_claims {
                     paths_exist(&reconstructed, &[not_to_be_disclosed_path]).expect_err(
                         "Some non-requested selectively disclosable paths \
-                        (and not indirectly implied by the request) are present",
+                            (and not indirectly implied by the request) are present",
                     );
                 }
+            }
+        }
+
+        #[tokio::test]
+        async fn holder_no_key_binding_verifier_happy_path() {
+            let requested_claims = TEST_PATHS;
+            let not_to_be_disclosed_claims: &[&[JsonNodePathSegment<'_>]] = &[];
+            let implied_paths: &[&[JsonNodePathSegment<'_>]] = &[
+                // non-selectively disclosable claim in the root object
+                &["baz".into()],
+            ];
+            let iat = 100;
+            let holder = test_holder(test_issuer_jwt(), StubVerifier::default(), iat).await;
+            let verifier = NoHolderBindingVerifier;
+
+            let challenge = dummy_key_binding_challenge();
+
+            let sd_jwt_kb = holder
+                .present(requested_claims, challenge, iat, &StubSigner::default())
+                .unwrap();
+
+            let sd_jwt = sd_jwt_kb.sd_jwt; // only sd_jwt can be verified
+
+            let signature_verifier = StubVerifier::default();
+            let reconstructed = verifier
+                .verify(
+                    sd_jwt,
+                    &dummy_public_key_lookup(),
+                    iat,
+                    dummy_hasher_factory,
+                    |_| Some(&signature_verifier),
+                )
+                .await
+                .unwrap()
+                .0
+                .to_object();
+
+            paths_exist(&reconstructed, requested_claims).expect("Requested path(s) missing");
+            paths_exist(&reconstructed, implied_paths)
+                .expect("Indirectly requested path(s) missing");
+
+            for not_to_be_disclosed_path in not_to_be_disclosed_claims {
+                paths_exist(&reconstructed, &[not_to_be_disclosed_path]).expect_err(
+                    "Some non-requested selectively disclosable paths \
+                        (and not indirectly implied by the request) are present",
+                );
             }
         }
     }
