@@ -44,7 +44,6 @@
 // Re-export the `bh-jws-utils` crate
 pub use bh_jws_utils;
 pub use error::{Error, FormatError, Result, SignatureError};
-use sd_jwt::SdJwt;
 
 mod error;
 mod key_binding;
@@ -66,5 +65,5 @@ pub use iref;
 pub use issuer::{IssuerJwt, IssuerJwtHeader};
 pub use key_binding::KeyBindingChallenge;
 pub use models::*;
-pub use sd_jwt::SdJwtKB;
+pub use sd_jwt::{SdJwt, SdJwtKB};
 pub use traits::*;

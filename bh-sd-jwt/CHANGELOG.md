@@ -8,8 +8,16 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Changed
+
 - Claim `cnf` in SD-JWT is OPTIONAL to allow implementation of issuance, presentation
   and verification of SD-JWT without Holder Key Binding.
+
+### Added
+
+- SD-JWT type is now part of crate`s public API
+- Verifier which verifies only the SD-JWT without Key Binding is implemented and
+  part of crate`s public API
 
 ## [0.5.1] - 2026-04-14
 

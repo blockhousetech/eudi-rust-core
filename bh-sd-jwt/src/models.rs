@@ -231,7 +231,7 @@ pub(crate) struct SdJwtSignatureVerified(ParsedSdJwtIssuance<jwt::Verified>);
 impl SdJwtSignatureVerified {
     /// Decode the SD-JWT, reconstructing the original payload.
     ///
-    /// CAUTION: do not expose or kb checks could be circumvented
+    /// CAUTION: do not expose or key binding checks could be accidentally circumvented
     pub(crate) fn into_decoded(
         self,
         get_hasher: impl Fn(HashingAlgorithm) -> Option<Box<dyn Hasher>>,
