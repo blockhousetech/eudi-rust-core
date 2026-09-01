@@ -78,6 +78,11 @@ impl SdJwtKB {
             key_binding_jwt,
         })
     }
+
+    /// `SD-JWT` part of the `SD-JWT+KB`.
+    pub fn to_sd_jwt(self) -> SdJwt {
+        self.sd_jwt
+    }
 }
 
 impl std::str::FromStr for SdJwt {
