@@ -8,6 +8,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added `to_sd_jwt` method to `SdJwtKB` type
+
 ## [0.6.0] - 2026-08-21
 
 ### Changed
