@@ -283,6 +283,10 @@ impl Holder {
     /// claim set and for the provided verifier's challenge, while proving key
     /// binding using the holder's private key to sign the KB JWT.
     ///
+    /// A presented [`SdJwtKB`] can be verified using
+    /// [`Verifier`](crate::verifier::Verifier)
+    /// with the same verifier's challenge used when calling this function.
+    ///
     /// # Details
     ///
     /// ## Claim set
@@ -322,6 +326,58 @@ impl Holder {
         current_time: SecondsSinceEpoch,
         key_binding_signer: &impl JwtSigner,
     ) -> Result<SdJwtKB> {
+        let sd_jwt = self.present_without_key_binding(claims_to_disclose)?;
+
+        let sd_jwt_kb = sd_jwt.add_key_binding_jwt(
+            self.decoded_sd_jwt.hasher(),
+            key_binding_challenge,
+            current_time,
+            key_binding_signer,
+        )?;
+
+        Ok(sd_jwt_kb)
+    }
+
+    /// Create a verifiable [`SdJwt`] of the held SD-JWT with the provided
+    /// claim set, without proving holder key binding.
+    ///
+    /// A presented [`SdJwt`] can be verified using
+    /// [`NoHolderBindingVerifier`](crate::verifier::NoHolderBindingVerifier).
+    ///
+    /// # Details
+    ///
+    /// ## Claim set
+    ///
+    /// The set of disclosures included in the presentation is the smallest set
+    /// of them which when combined include all the paths in
+    /// `claims_to_disclose`. Note that it is valid for the paths to include
+    /// even non-selectively-disclosable claims.
+    ///
+    /// Also note that the total set of claims disclosed may in general **exceed**
+    /// the requested set due to the structure of disclosures; for example, if an
+    /// object node is selectively disclosable only as a whole, requesting any
+    /// of its fields (or descendants) will require *all* the fields to be pulled in.
+    /// **This could result in disclosing more information than intended.**
+    /// Depending on the details of protocols used for presentation exchange, this
+    /// could prevent the presentation from proceeding; see e.g.
+    /// [the `limit_disclosure` constraint in DIF presentation exchange](
+    /// https://identity.foundation/presentation-exchange/#limited-disclosure-submissions)
+    ///
+    /// ## Confirmation (`cnf`) claim
+    ///
+    /// Confirmation (`cnf`) claim containing Holder's public JWK can be present even
+    /// though SD-JWT will be presented without Holder Key Binding [1].
+    ///
+    /// # Errors
+    ///
+    /// If any requested path doesn't exist within the fully reconstructed payload,
+    /// this function will error with [`HolderError::NonexistentClaims`].
+    ///
+    /// [1]: https://www.ietf.org/archive/id/draft-ietf-oauth-sd-jwt-vc-19.html#section-2.2.2.3-3.4
+    pub fn present_without_key_binding(
+        &self,
+        claims_to_disclose: &[&JsonNodePath],
+    ) -> Result<SdJwt> {
         // First check whether all paths correspond to existing nodes - including non-selectively
         // disclosable ones, just to be sure
         paths_exist(&self.claims().to_object(), claims_to_disclose).map_err(
@@ -343,21 +399,15 @@ impl Holder {
             .map(|disclosure| disclosure.as_str().to_owned())
             .collect();
 
-        let sd_jwt = SdJwt::new(self.original_issuer_jwt.clone(), presented_disclosures);
-
         // TODO(issues/47) also compute whether there is anything disclosed beyond
         // what was requested due to the limitations of the schema, as this
         // could maybe prevent presentation from proceeding, e.g.
         // https://identity.foundation/presentation-exchange/#limited-disclosure-submissions
-
-        let sd_jwt_kb = sd_jwt.add_key_binding_jwt(
-            self.decoded_sd_jwt.hasher(),
-            key_binding_challenge,
-            current_time,
-            key_binding_signer,
-        )?;
-
-        Ok(sd_jwt_kb)
+        //
+        Ok(SdJwt::new(
+            self.original_issuer_jwt.clone(),
+            presented_disclosures,
+        ))
     }
 }
 
