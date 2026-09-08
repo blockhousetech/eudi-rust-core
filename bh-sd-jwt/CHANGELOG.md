@@ -8,6 +8,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- `Holder::present_without_key_binding` method implemented.
+
 ## [0.6.1] - 2026-09-01
 
 ### Added

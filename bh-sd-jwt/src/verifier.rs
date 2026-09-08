@@ -735,7 +735,6 @@ mod tests {
         use JsonNodePathSegment::*;
 
         use super::*;
-        use crate::test_utils::dummy_key_binding_challenge;
         use crate::{
             issuer::tests::{test_issuer_jwt, TEST_DISCLOSURE_PATHS as TEST_PATHS},
             paths_exist,
@@ -745,6 +744,40 @@ mod tests {
             },
             JsonNodePath, JsonNodePathSegment,
         };
+
+        async fn verify_no_key_binding_presentation<'a>(
+            sd_jwt: SdJwt,
+            current_time: SecondsSinceEpoch,
+            requested_claims: &'a [&'a JsonNodePath<'a>],
+            not_to_be_disclosed_claims: &'a [&'a JsonNodePath<'a>],
+            implied_paths: &'a [&'a JsonNodePath<'a>],
+        ) {
+            let signature_verifier = StubVerifier::default();
+
+            let reconstructed = NoHolderBindingVerifier
+                .verify(
+                    sd_jwt,
+                    &dummy_public_key_lookup(),
+                    current_time,
+                    dummy_hasher_factory,
+                    |_| Some(&signature_verifier),
+                )
+                .await
+                .unwrap()
+                .0
+                .to_object();
+
+            paths_exist(&reconstructed, requested_claims).expect("Requested path(s) missing");
+            paths_exist(&reconstructed, implied_paths)
+                .expect("Indirectly requested path(s) missing");
+
+            for not_to_be_disclosed_path in not_to_be_disclosed_claims {
+                paths_exist(&reconstructed, &[not_to_be_disclosed_path]).expect_err(
+                    "Some non-requested selectively disclosable paths \
+                        (and not indirectly implied by the request) are present",
+                );
+            }
+        }
 
         #[tokio::test]
         async fn holder_verifier_happy_path() {
@@ -941,7 +974,7 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn holder_no_key_binding_verifier_happy_path() {
+        async fn holder_with_cnf_no_key_binding_verifier_happy_path() {
             let requested_claims = TEST_PATHS;
             let not_to_be_disclosed_claims: &[&[JsonNodePathSegment<'_>]] = &[];
             let implied_paths: &[&[JsonNodePathSegment<'_>]] = &[
@@ -950,40 +983,53 @@ mod tests {
             ];
             let iat = 100;
             let holder = test_holder(test_issuer_jwt(), StubVerifier::default(), iat).await;
-            let verifier = NoHolderBindingVerifier;
-
-            let challenge = dummy_key_binding_challenge();
-
-            let sd_jwt_kb = holder
-                .present(requested_claims, challenge, iat, &StubSigner::default())
+            let sd_jwt = holder
+                .present_without_key_binding(requested_claims)
                 .unwrap();
 
-            let sd_jwt = sd_jwt_kb.sd_jwt; // only sd_jwt can be verified
+            verify_no_key_binding_presentation(
+                sd_jwt,
+                iat,
+                requested_claims,
+                not_to_be_disclosed_claims,
+                implied_paths,
+            )
+            .await;
+        }
 
-            let signature_verifier = StubVerifier::default();
-            let reconstructed = verifier
-                .verify(
-                    sd_jwt,
-                    &dummy_public_key_lookup(),
-                    iat,
-                    dummy_hasher_factory,
-                    |_| Some(&signature_verifier),
-                )
-                .await
-                .unwrap()
-                .0
-                .to_object();
+        #[tokio::test]
+        async fn holder_without_cnf_no_key_binding_verifier_happy_path() {
+            let requested_claims = TEST_PATHS;
+            let not_to_be_disclosed_claims: &[&[JsonNodePathSegment<'_>]] = &[];
+            let implied_paths: &[&[JsonNodePathSegment<'_>]] = &[
+                // non-selectively disclosable claim in the root object
+                &["baz".into()],
+            ];
+            let iat = 100;
 
-            paths_exist(&reconstructed, requested_claims).expect("Requested path(s) missing");
-            paths_exist(&reconstructed, implied_paths)
-                .expect("Indirectly requested path(s) missing");
+            let jwk = None;
+            let issuer_jwt = IssuerJwt::new(
+                "TestCredential".into(),
+                dummy_https_iss(),
+                jwk,
+                dummy_claims(),
+            )
+            .unwrap();
 
-            for not_to_be_disclosed_path in not_to_be_disclosed_claims {
-                paths_exist(&reconstructed, &[not_to_be_disclosed_path]).expect_err(
-                    "Some non-requested selectively disclosable paths \
-                        (and not indirectly implied by the request) are present",
-                );
-            }
+            let holder = test_holder(issuer_jwt, StubVerifier::default(), iat).await;
+
+            let sd_jwt = holder
+                .present_without_key_binding(requested_claims)
+                .unwrap();
+
+            verify_no_key_binding_presentation(
+                sd_jwt,
+                iat,
+                requested_claims,
+                not_to_be_disclosed_claims,
+                implied_paths,
+            )
+            .await;
         }
     }
 }
