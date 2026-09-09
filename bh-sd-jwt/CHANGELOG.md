@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-09-09
+
 ### Added
 
 - `Holder::present_without_key_binding` method implemented.
@@ -95,7 +97,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - README.md describing the crate.
 - Initial version of the `bh-sd-jwt` crate.
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-sd-jwt/v0.6.1...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-sd-jwt/v0.6.2...HEAD>
+[0.6.2]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.6.2>
 [0.6.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.6.1>
 [0.6.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.6.0>
 [0.5.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.5.1>
