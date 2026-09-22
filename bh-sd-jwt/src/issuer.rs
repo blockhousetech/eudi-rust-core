@@ -195,19 +195,20 @@ impl jwt::JoseHeader for IssuerJwtHeader {
 pub struct IssuerJwt {
     /// Issuer of the verifiable credential.
     ///
-    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-01#section-3.2.2.2-3.1.1)
-    pub iss: String,
+    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-19#section-2.2.2.3-3.1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iss: Option<String>,
 
     /// The time before which the Verifiable Credential MUST NOT be accepted before validating.
     ///
-    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-01#section-3.2.2.2-3.3.1)
+    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-19#section-2.2.2.3-3.2)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nbf: Option<SecondsSinceEpoch>,
 
     /// The expiry time of the Verifiable Credential after which the Verifiable
     /// Credential is no longer valid.
     ///
-    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-01#section-3.2.2.2-3.4.2.1)
+    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-19#section-2.2.2.3-3.3)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exp: Option<SecondsSinceEpoch>,
 
@@ -226,18 +227,18 @@ pub struct IssuerJwt {
 
     /// Verifiable credential type. Case-sensitive `StringOrUri` Collision-Resistant Name.
     ///
-    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-01#section-3.2.2.1.1-1)
+    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-19#section-2.2.2.3-3.5)
     pub vct: String,
 
     /// The information on how to read the status of the Verifiable Credential.
     ///
-    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-01#section-3.2.2.2-3.7.2.1)
+    /// [Reference](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-19#section-2.2.2.3-3.8)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<StatusClaim>,
 
-    /// The hash algorithm used to hide the claims, as specified [here].
+    /// The hash algorithm used to hide the claims, as specified in [RFC 9901].
     ///
-    /// [here]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-selective-disclosure-jwt-07#name-hash-function-claim
+    /// [RFC 9901]: https://datatracker.ietf.org/doc/html/rfc9901#hash_function_claim
     #[serde(rename = "_sd_alg", skip_serializing_if = "Option::is_none")]
     pub(crate) sd_alg: Option<HashingAlgorithm>,
 
@@ -273,7 +274,7 @@ impl IssuerJwt {
     /// [SD-JWT-VC-cnf]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-18#section-2.2.2.3-3.4
     pub fn new(
         vct: String,
-        iss: UriBuf,
+        iss: Option<UriBuf>,
         holder_binding_public_jwk: Option<JwkPublic>,
         claims: JsonObject,
     ) -> Result<Self> {
@@ -290,7 +291,7 @@ impl IssuerJwt {
         let cnf = holder_binding_public_jwk.map(|jwk| CnfClaim { jwk });
 
         Ok(Self {
-            iss: iss.to_string(),
+            iss: iss.map(UriBuf::into_string),
             nbf: None,
             exp: None,
             cnf,
@@ -481,7 +482,7 @@ pub(crate) mod tests {
     pub(crate) fn test_issuer_jwt() -> IssuerJwt {
         IssuerJwt::new(
             "TestCredential".into(),
-            dummy_https_iss(),
+            Some(dummy_https_iss()),
             Some(dummy_public_jwk()),
             dummy_claims(),
         )
@@ -680,7 +681,7 @@ pub(crate) mod tests {
         for (model, reserved_name) in invalid_models {
             let result = IssuerJwt::new(
                 "TestCredential".into(),
-                dummy_https_iss(),
+                Some(dummy_https_iss()),
                 Some(dummy_public_jwk()),
                 model,
             );
@@ -696,7 +697,7 @@ pub(crate) mod tests {
         let sub = "subject identifier";
         let issuer_jwt = IssuerJwt::new(
             "TestCredential".into(),
-            dummy_https_iss(),
+            Some(dummy_https_iss()),
             Some(dummy_public_jwk()),
             json_object!({
                 "sub": sub,
@@ -749,7 +750,7 @@ pub(crate) mod tests {
     fn cnf_is_omitted_when_key_binding_is_not_supported() {
         let jwt = IssuerJwt::new(
             "TestCredential".into(),
-            dummy_https_iss(),
+            Some(dummy_https_iss()),
             None,
             dummy_claims(),
         )
@@ -768,7 +769,7 @@ pub(crate) mod tests {
     fn cnf_null_valus_is_invalid() {
         let jwt = IssuerJwt::new(
             "TestCredential".into(),
-            dummy_https_iss(),
+            Some(dummy_https_iss()),
             None,
             dummy_claims(),
         )

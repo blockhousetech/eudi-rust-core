@@ -233,7 +233,8 @@ fn issuer(signer: &Es256SignerWithChain, key_binding_public_key: JwkPublic) -> S
         serde_json::to_string_pretty(&claims).unwrap(),
     );
 
-    let mut jwt_payload = IssuerJwt::new(vct, iss(), Some(key_binding_public_key), claims).unwrap();
+    let mut jwt_payload =
+        IssuerJwt::new(vct, Some(iss()), Some(key_binding_public_key), claims).unwrap();
 
     jwt_payload.add_iat_claim(IAT);
     jwt_payload.exp = Some(EXP);
@@ -309,11 +310,11 @@ impl IssuerPublicKeyLookup for IssuerPublicKeyOracle {
 
     async fn lookup(
         &self,
-        alleged_iss: &str,
+        alleged_iss: Option<&str>,
         header: &bh_sd_jwt::IssuerJwtHeader,
     ) -> Result<JwkPublic, Error<Self::Err>> {
         // Mocked ...
-        assert_eq!(alleged_iss, "https://example.com/issuer");
+        assert_eq!(alleged_iss, Some("https://example.com/issuer"));
         // TODO(issues/45) - return this check once `kid` is used again
         // assert_eq!(header.kid.as_ref().unwrap(), ISSUER_KID);
         assert!(header.x5c.is_some());
