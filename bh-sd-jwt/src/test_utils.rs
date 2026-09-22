@@ -31,7 +31,7 @@ pub(crate) fn dummy_public_key_lookup() -> impl IssuerPublicKeyLookup {
 
         async fn lookup(
             &self,
-            _alleged_iss: &str,
+            _alleged_iss: Option<&str>,
             _header: &IssuerJwtHeader,
         ) -> Result<JwkPublic, Error<Self::Err>> {
             // Ignore the `iss` claim and the header entirely - for more sophisticated tests,
@@ -51,7 +51,7 @@ pub(crate) fn header_public_key_lookup() -> impl IssuerPublicKeyLookup {
 
         async fn lookup(
             &self,
-            _alleged_iss: &str,
+            _alleged_iss: Option<&str>,
             header: &IssuerJwtHeader,
         ) -> Result<JwkPublic, Error<Self::Err>> {
             // Ignore the `iss` claim entirely - for more sophisticated tests,
@@ -74,7 +74,7 @@ pub(crate) fn failing_public_key_lookup() -> impl IssuerPublicKeyLookup {
 
         async fn lookup(
             &self,
-            _alleged_iss: &str,
+            _alleged_iss: Option<&str>,
             _header: &crate::IssuerJwtHeader,
         ) -> std::result::Result<bh_jws_utils::JwkPublic, Error<Self::Err>> {
             Err(Error::root(SignatureError::PublicKeyLookupFailed))

@@ -167,7 +167,7 @@ impl SdJwtUnverified<'_> {
         get_signature_verifier: impl FnOnce(SigningAlgorithm) -> Option<&'a dyn SignatureVerifier>,
     ) -> Result<(&'a dyn SignatureVerifier, SigningAlgorithm, JwkPublic), SignatureError> {
         let key = issuer_public_key_lookup
-            .lookup(&self.0.jwt.claims().iss, self.0.jwt.header())
+            .lookup(self.0.jwt.claims().iss.as_deref(), self.0.jwt.header())
             .await
             .with_err(|| SignatureError::PublicKeyLookupFailed)?;
 

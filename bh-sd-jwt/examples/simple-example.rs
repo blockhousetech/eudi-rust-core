@@ -80,7 +80,7 @@ async fn main() {
 
     let jwt_payload = IssuerJwt::new(
         "personal_identity_card".to_owned(), // the type of the credential
-        iss,
+        Some(iss),
         Some(holder_signer.public_jwk().unwrap()),
         claims,
     )
