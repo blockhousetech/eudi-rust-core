@@ -236,9 +236,15 @@ where
     ///
     async fn lookup(
         &self,
-        alleged_iss: &str,
+        alleged_iss: Option<&str>,
         header: &IssuerJwtHeader,
     ) -> Result<JwkPublic, Error<Self::Err>> {
+        let Some(alleged_iss) = alleged_iss else {
+            return Err(Error::root(LookupError(
+                "Missing `iss` claim for JWT VC Issuer Metadata-based public key lookup".to_owned(),
+            )));
+        };
+
         let Ok(alleged_iss) = alleged_iss.try_into() else {
             return Err(Error::root(LookupError(format!(
                 "Invalid `iss` URL: {}",
@@ -387,7 +393,7 @@ impl IssuerPublicKeyLookup for X5ChainIssuerPublicKeyLookup {
     /// Retrieve and check the Issuer public key from the x5chain field in the JWT header.
     async fn lookup(
         &self,
-        _alleged_iss: &str,
+        _alleged_iss: Option<&str>,
         header: &IssuerJwtHeader,
     ) -> Result<JwkPublic, Error<Self::Err>> {
         let Some(jwt_x5chain) = &header.x5c else {
@@ -531,7 +537,7 @@ pub(crate) mod tests {
         let header = example_header();
 
         let response = HttpsIssuerPublicKeyLookup { client }
-            .lookup(Uri::new(alleged_iss).unwrap(), &header)
+            .lookup(Some(Uri::new(alleged_iss).unwrap()), &header)
             .await
             .unwrap();
 
@@ -562,7 +568,7 @@ pub(crate) mod tests {
         let header = example_header();
 
         let response = HttpsIssuerPublicKeyLookup { client }
-            .lookup(Uri::new(alleged_iss).unwrap(), &header)
+            .lookup(Some(Uri::new(alleged_iss).unwrap()), &header)
             .await
             .unwrap();
 
@@ -596,7 +602,7 @@ pub(crate) mod tests {
         let header = example_header();
 
         let response = HttpsIssuerPublicKeyLookup { client }
-            .lookup(Uri::new(alleged_iss).unwrap(), &header)
+            .lookup(Some(Uri::new(alleged_iss).unwrap()), &header)
             .await
             .unwrap();
 
@@ -617,7 +623,7 @@ pub(crate) mod tests {
         };
 
         let response = HttpsIssuerPublicKeyLookup { client }
-            .lookup(Uri::new(alleged_iss).unwrap(), &example_header())
+            .lookup(Some(Uri::new(alleged_iss).unwrap()), &example_header())
             .await;
 
         assert_eq!(
@@ -637,7 +643,7 @@ pub(crate) mod tests {
         };
 
         let response = HttpsIssuerPublicKeyLookup { client }
-            .lookup(Uri::new(alleged_iss).unwrap(), &example_header())
+            .lookup(Some(Uri::new(alleged_iss).unwrap()), &example_header())
             .await;
 
         assert_eq!(
@@ -657,12 +663,33 @@ pub(crate) mod tests {
         };
 
         let response = HttpsIssuerPublicKeyLookup { client }
-            .lookup(Uri::new(alleged_iss).unwrap(), &example_header())
+            .lookup(Some(Uri::new(alleged_iss).unwrap()), &example_header())
             .await;
 
         assert_eq!(
             response.unwrap_err().error,
             LookupError("iss uri should not contain query or fragment parts".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn missing_iss() {
+        let client = StubClient {
+            // Won't get called
+            expected_url: None,
+            response: response_with_metadata(example_metadata()),
+        };
+
+        let header = example_header();
+
+        let error = HttpsIssuerPublicKeyLookup { client }
+            .lookup(None, &header)
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.error.0,
+            "Missing `iss` claim for JWT VC Issuer Metadata-based public key lookup",
         );
     }
 
@@ -680,7 +707,7 @@ pub(crate) mod tests {
         };
 
         let response = HttpsIssuerPublicKeyLookup { client }
-            .lookup(Uri::new(alleged_iss).unwrap(), &example_header())
+            .lookup(Some(Uri::new(alleged_iss).unwrap()), &example_header())
             .await;
 
         assert_eq!(
@@ -704,7 +731,7 @@ pub(crate) mod tests {
         };
 
         let response = HttpsIssuerPublicKeyLookup { client }
-            .lookup(Uri::new(alleged_iss).unwrap(), &example_header())
+            .lookup(Some(Uri::new(alleged_iss).unwrap()), &example_header())
             .await;
 
         assert_eq!(
@@ -726,7 +753,7 @@ pub(crate) mod tests {
         };
 
         let response = HttpsIssuerPublicKeyLookup { client }
-            .lookup(Uri::new(alleged_iss).unwrap(), &example_header())
+            .lookup(Some(Uri::new(alleged_iss).unwrap()), &example_header())
             .await;
 
         assert_eq!(
@@ -759,7 +786,7 @@ pub(crate) mod tests {
         header.kid = Some("kid2".to_string());
 
         let response = HttpsIssuerPublicKeyLookup { client }
-            .lookup(Uri::new(alleged_iss).unwrap(), &header)
+            .lookup(Some(Uri::new(alleged_iss).unwrap()), &header)
             .await
             .unwrap();
 
@@ -909,7 +936,18 @@ UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
         let header = example_header_with_x5c(jwt_x5chain.clone());
 
         let public_jwk = X5ChainIssuerPublicKeyLookup::trust_all()
-            .lookup(alleged_iss, &header)
+            .lookup(None, &header)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            public_jwk_from_x5chain_leaf(&x5chain, &header.alg, header.kid.as_deref()).unwrap(),
+            public_jwk
+        );
+
+        let public_jwk = X5ChainIssuerPublicKeyLookup::trust_all()
+            // `iss` doesn't matter when provided
+            .lookup(Some(alleged_iss), &header)
             .await
             .unwrap();
 
@@ -921,11 +959,10 @@ UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
 
     #[tokio::test]
     async fn test_public_key_from_x5chain_missing_header_field() {
-        let alleged_iss = "https://example.com";
         let header = example_header();
 
         let err = X5ChainIssuerPublicKeyLookup::trust_all()
-            .lookup(alleged_iss, &header)
+            .lookup(None, &header)
             .await
             .unwrap_err()
             .error;
@@ -938,13 +975,12 @@ UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
         let x5chain = dummy_x5chain();
         let jwt_x5chain = dummy_jwt_x5chain();
 
-        let alleged_iss = "https://example.com";
         let header = example_header_with_x5c(jwt_x5chain.clone());
 
         // Issuer authenticity verified
         let trust = X509Trust::new(vec![dummy_root_certificate()]);
         let public_jwk = X5ChainIssuerPublicKeyLookup::with_trust(trust)
-            .lookup(alleged_iss, &header)
+            .lookup(None, &header)
             .await
             .unwrap();
         assert_eq!(
@@ -955,7 +991,7 @@ UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
         // no Issuer is trusted (empty `trust`)
         let trust = X509Trust::new(vec![]);
         let err = X5ChainIssuerPublicKeyLookup::with_trust(trust)
-            .lookup(alleged_iss, &header)
+            .lookup(None, &header)
             .await
             .unwrap_err();
         assert!(
@@ -964,7 +1000,7 @@ UGok7hT15f+X6wIgHQ5uUck3v4W0PxZyVL1dd6tZM3gPcmD/yR25VcbrADY=
 
         // every Issuer is trusted (`trust` not provided)
         let public_jwk = X5ChainIssuerPublicKeyLookup::trust_all()
-            .lookup(alleged_iss, &header)
+            .lookup(None, &header)
             .await
             .unwrap();
         assert_eq!(

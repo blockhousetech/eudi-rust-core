@@ -8,6 +8,10 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Claim `iss` is now OPTIONAL, as specified by latest current draft 19.
+
 ## [0.6.2] - 2026-09-09
 
 ### Added
