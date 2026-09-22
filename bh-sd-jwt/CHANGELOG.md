@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-22
+
 ### Changed
 
 - Claim `iss` is now OPTIONAL, as specified by latest current draft 19.
@@ -101,7 +103,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - README.md describing the crate.
 - Initial version of the `bh-sd-jwt` crate.
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-sd-jwt/v0.6.2...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-sd-jwt/v0.7.0...HEAD>
+[0.7.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.7.0>
 [0.6.2]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.6.2>
 [0.6.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.6.1>
 [0.6.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-sd-jwt/v0.6.0>
