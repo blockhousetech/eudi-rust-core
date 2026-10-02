@@ -22,7 +22,7 @@ use openssl::{
     x509::{
         store::{X509Store, X509StoreBuilder},
         verify::X509VerifyFlags,
-        X509StoreContext, X509,
+        X509StoreContext, X509VerifyResult, X509,
     },
 };
 
@@ -32,6 +32,8 @@ use crate::{Error, JwtX5Chain, Result};
 ///
 /// The certificates are ordered starting with the certificate containing the end-entity key
 /// followed by the certificate that signed it, and so on, as stated in [RFC 9360][1].
+///
+/// A trailing self-signed root certificate is omitted unless it is the only certificate.
 ///
 /// All methods of this type that return an [`Error`] do so in case the `x5chain` is invalid.
 ///
@@ -45,6 +47,8 @@ pub struct X5Chain {
 impl X5Chain {
     /// Create a new [`X5Chain`].
     ///
+    /// A trailing self-signed root certificate is omitted unless it is the only certificate.
+    ///
     /// The chain **MUST BE** ordered in such a way that the leaf certificate is at first place,
     /// then goes its parent, and so on.
     ///
@@ -53,9 +57,14 @@ impl X5Chain {
     /// The chain is at this point **NOT VALIDATED** against any trusted root certificate. In order
     /// to validate the chain against a trusted root certificate, use the
     /// [`X5Chain::verify_against_trusted_roots`] method.
-    pub fn new(chain: Vec<X509>) -> Result<Self> {
+    pub fn new(mut chain: Vec<X509>) -> Result<Self> {
         // validate the order of certificates
         validate_chain_order(&chain)?;
+
+        // remove the trailing self-signed root certificate if it is not the only certificate
+        if chain.len() > 1 && is_self_signed(chain.last().expect("chain is non-empty"))? {
+            chain.pop();
+        }
 
         let mut chain = chain.into_iter();
         // `expect` is fine as the length is checked within the `validate_chain_order`
@@ -150,9 +159,19 @@ impl X5Chain {
         Ok(self.to_pem()?.concat())
     }
 
+    /// Returns `true` if the chain contains only a single self-signed certificate.
+    pub fn is_self_signed(&self) -> Result<bool> {
+        if !self.intermediates.is_empty() {
+            return Ok(false);
+        }
+
+        is_self_signed(&self.leaf)
+    }
+
     /// Verify the [`X5Chain`] against trusted root certificates.
     ///
-    /// The root certificate may be in chain, but it **MUST BE** found in `trust` as well.
+    /// The root certificate **MUST BE** found in `trust`, including when the chain consists of a
+    /// single self-signed certificate.
     pub fn verify_against_trusted_roots(&self, trust: &X509Trust) -> Result<()> {
         // It is "ugly" that we need to clone here, but if intermediates are kept as a Stack instead
         // of Vec, it messes up a lot of other things, such as Debug, Clone, PartialEq. It is hard
@@ -248,6 +267,17 @@ m0u5S+/UL3BnCba7Efw3lkBfTBkdKWgrdzEw
     }
 }
 
+/// Returns `true` if the certificate is self-signed.
+fn is_self_signed(cert: &X509) -> Result<bool> {
+    clean_up_after_openssl(|| {
+        Ok(
+            cert.issued(cert) == X509VerifyResult::OK
+                && cert.verify(cert.public_key()?.as_ref())?,
+        )
+    })
+    .foreign_err(|| Error::X5Chain)
+}
+
 /// A collection of [`X509`] trusted root certificates.
 ///
 /// This is used to verify the authenticity of the [`X5Chain`].
@@ -319,7 +349,7 @@ fn validate_chain_order(chain: &[X509]) -> Result<()> {
 
             let is_child = clean_up_after_openssl(|| child.verify(parent.public_key()?.as_ref()))?;
 
-            Ok::<_, openssl::error::ErrorStack>(acc && is_child)
+            Ok::<_, ErrorStack>(acc && is_child)
         })
         .foreign_err(|| Error::X5Chain)?;
 
@@ -471,6 +501,35 @@ m0u5S+/UL3BnCba7Efw3lkBfTBkdKWgrdzEw
     }
 
     #[test]
+    fn test_is_self_signed() {
+        let [leaf, intermediary, root] = get_certs();
+
+        assert!(is_self_signed(&root).unwrap());
+        assert_empty_error_stack();
+
+        assert!(!is_self_signed(&leaf).unwrap());
+        assert_empty_error_stack();
+
+        assert!(!is_self_signed(&intermediary).unwrap());
+        assert_empty_error_stack();
+    }
+
+    #[test]
+    fn test_x5chain_is_self_signed() {
+        let [leaf, intermediary, root] = get_certs();
+
+        let chain = X5Chain::new(vec![root]).unwrap();
+        assert!(chain.is_self_signed().unwrap());
+
+        let chain = X5Chain::new(vec![leaf.clone()]).unwrap();
+        assert!(!chain.is_self_signed().unwrap());
+
+        let chain = X5Chain::new(vec![leaf, intermediary]).unwrap();
+        assert!(!chain.is_self_signed().unwrap());
+        assert_empty_error_stack();
+    }
+
+    #[test]
     fn test_validate_chain_order() {
         let [leaf, intermediary, root] = get_certs();
 
@@ -499,7 +558,20 @@ m0u5S+/UL3BnCba7Efw3lkBfTBkdKWgrdzEw
         let root = root.to_der().unwrap();
 
         // valid chain
-        X5Chain::from_raw_bytes(&[leaf, intermediary, root]).unwrap();
+        let chain = X5Chain::from_raw_bytes(&[leaf.clone(), intermediary.clone()]).unwrap();
+        assert_eq!(
+            chain.as_bytes().unwrap(),
+            vec![leaf.clone(), intermediary.clone()]
+        );
+
+        // valid chain that omits the root certificate when present
+        let chain =
+            X5Chain::from_raw_bytes(&[leaf.clone(), intermediary.clone(), root.clone()]).unwrap();
+        assert_eq!(chain.as_bytes().unwrap(), vec![leaf, intermediary]);
+
+        // valid chain with only the self-signed root keeps the root
+        let chain = X5Chain::from_raw_bytes(std::slice::from_ref(&root)).unwrap();
+        assert_eq!(chain.as_bytes().unwrap(), vec![root]);
 
         // empty chain is invalid
         let err = X5Chain::from_raw_bytes(&[]).unwrap_err();
@@ -544,7 +616,7 @@ m0u5S+/UL3BnCba7Efw3lkBfTBkdKWgrdzEw
 
         let pem = x5chain.to_pem().unwrap();
 
-        assert_eq!(pem.concat(), CERTS);
+        assert_eq!(pem, vec![leaf, intermediary]);
 
         let x5chain_round_trip = X5Chain::from_pem(&pem).unwrap();
 
@@ -580,7 +652,12 @@ m0u5S+/UL3BnCba7Efw3lkBfTBkdKWgrdzEw
     fn test_to_pem_concat() {
         let x5chain = X5Chain::from_pem_concat(CERTS).unwrap();
 
-        assert_eq!(x5chain.to_pem_concat().unwrap(), CERTS);
+        // the root is omitted
+        let expected: String = CERTS
+            .split_inclusive("-----END CERTIFICATE-----\n")
+            .take(2)
+            .collect();
+        assert_eq!(x5chain.to_pem_concat().unwrap(), expected);
     }
 
     #[test]
@@ -622,6 +699,10 @@ m0u5S+/UL3BnCba7Efw3lkBfTBkdKWgrdzEw
         chain.verify_against_trusted_roots(&trusted).unwrap_err();
         assert_empty_error_stack();
 
+        // Omitting the supplied root still permits validation against explicit trust
+        let chain = X5Chain::new(vec![leaf.clone(), intermediary.clone()]).unwrap();
+        chain.verify_against_trusted_roots(&trusted).unwrap();
+
         // Chain is not valid when leaf cannot be traced to any trusted root
         let chain = X5Chain::new(vec![leaf, intermediary, root]).unwrap();
         let trusted = X509Trust::new(Vec::new());
@@ -631,7 +712,7 @@ m0u5S+/UL3BnCba7Efw3lkBfTBkdKWgrdzEw
 
     // Kindly taken from bhcrypto
     fn assert_empty_error_stack() {
-        let errors = openssl::error::ErrorStack::get();
+        let errors = ErrorStack::get();
         assert!(
             errors.errors().is_empty(),
             "Error stack was non-empty: {:?}",
