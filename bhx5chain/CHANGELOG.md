@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-05
+
 ### Added
 
 - Public method to check if the `X5Chain` consists of only a single self-signed
@@ -71,7 +73,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - Initial version of the `bhx5chain` crate.
 
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhx5chain/v0.3.2...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhx5chain/v0.3.3...HEAD>
+[0.3.3]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.3.3>
 [0.3.2]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.3.2>
 [0.3.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.3.1>
 [0.3.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhx5chain/v0.3.0>
