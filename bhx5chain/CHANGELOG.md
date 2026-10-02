@@ -8,6 +8,16 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- Public method to check if the `X5Chain` consists of only a single self-signed
+  certificate.
+
+### Changed
+
+- `X5Chain` now omits a trailing self-signed root certificate during construction,
+  while preserving chains containing only a single self-signed certificate.
+
 ## [0.3.2] - 2025-12-10
 
 ### Changed
