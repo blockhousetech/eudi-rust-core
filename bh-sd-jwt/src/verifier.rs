@@ -516,7 +516,7 @@ mod tests {
         let iat = 100;
         let issuer_jwt = IssuerJwt::new(
             "TestCredential".into(),
-            dummy_https_iss(),
+            Some(dummy_https_iss()),
             None,
             dummy_claims(),
         )
@@ -654,7 +654,7 @@ mod tests {
     async fn nbf_in_future() {
         let mut issuer_jwt = IssuerJwt::new(
             "TestCredential".into(),
-            dummy_https_iss(),
+            Some(dummy_https_iss()),
             Some(dummy_public_jwk()),
             dummy_claims(),
         )
@@ -693,7 +693,7 @@ mod tests {
     async fn presentation_expired() {
         let mut issuer_jwt = IssuerJwt::new(
             "TestCredential".into(),
-            dummy_https_iss(),
+            Some(dummy_https_iss()),
             Some(dummy_public_jwk()),
             dummy_claims(),
         )
@@ -1010,7 +1010,7 @@ mod tests {
             let jwk = None;
             let issuer_jwt = IssuerJwt::new(
                 "TestCredential".into(),
-                dummy_https_iss(),
+                Some(dummy_https_iss()),
                 jwk,
                 dummy_claims(),
             )

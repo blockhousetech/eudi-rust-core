@@ -67,7 +67,7 @@ pub trait IssuerPublicKeyLookup: Sync {
     /// Lookup a public key for the alleged Issuer Identifier.
     fn lookup(
         &self,
-        alleged_iss: &str,
+        alleged_iss: Option<&str>,
         header: &IssuerJwtHeader,
     ) -> impl Future<Output = Result<JwkPublic, Error<Self::Err>>> + Send;
 }
