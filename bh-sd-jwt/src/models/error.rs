@@ -27,6 +27,10 @@ pub enum DecodingError {
     #[strum(to_string = "Reserved key name {0} usage")]
     ReservedKeyName(&'static str),
 
+    /// Error indicating that a registered key name is illegally present in a disclosure.
+    #[strum(to_string = "Registered key name {0} present in disclosure")]
+    RegisteredKeyNameInDisclosure(&'static str),
+
     /// Error indicating that the digest is not in the expected format.
     #[strum(to_string = "Malformed digest: {0}")]
     MalformedDigest(String),

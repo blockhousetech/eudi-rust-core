@@ -19,6 +19,7 @@ use bherror::{traits::PropagateError, Error};
 use serde_json::Value;
 
 use crate::{
+    issuer::REGISTERED_CLAIM_NAMES,
     path_map,
     utils::{is_reserved_key_name, VecDisplayWrapper, SD_ALG_FIELD_NAME},
     DecodingError, DecodingResult, Disclosure, DisclosureByDigestTable, DisclosureByPathTable,
@@ -142,14 +143,25 @@ fn decode_object<'json, 'dis: 'json>(
             match disclosure.data {
                 DisclosureData::KeyValue {
                     ref key, ref value, ..
-                } => process_key_value(
-                    key,
-                    value,
-                    &mut decoded_object,
-                    state,
-                    &mut disclosures_by_path,
-                    Some(disclosure),
-                )?,
+                } => {
+                    // https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-19#section-2.2.2.3-2
+                    if top_level {
+                        if let Some(key) = REGISTERED_CLAIM_NAMES.get(key.as_str()) {
+                            return Err(Error::root(DecodingError::RegisteredKeyNameInDisclosure(
+                                key,
+                            )));
+                        }
+                    }
+
+                    process_key_value(
+                        key,
+                        value,
+                        &mut decoded_object,
+                        state,
+                        &mut disclosures_by_path,
+                        Some(disclosure),
+                    )?
+                }
                 _ => {
                     // https://datatracker.ietf.org/doc/html/draft-ietf-oauth-selective-disclosure-jwt-13#section-7.1-4.3.2.3.2.2.2.1
                     return Err(Error::root(DecodingError::MismatchedDisclosureFormat));
@@ -330,7 +342,7 @@ pub(crate) mod tests {
     use super::DisclosureByPathTable;
     use crate::{
         decoder::decode_disclosed_claims,
-        into_object, path,
+        into_object, json_object, path,
         test_utils::dummy_hasher_factory,
         utils::{base64_url_digest, VecDisplayWrapper, SD_ALG_FIELD_NAME},
         DecodingError, Disclosure, DisplayWrapper, Hasher, HashingAlgorithm, JsonNodePath, Sha256,
@@ -941,6 +953,52 @@ pub(crate) mod tests {
         assert_eq!(
             invalid_recreate.unwrap_err().error,
             DecodingError::ReservedKeyName(ELLIPSIS)
+        );
+    }
+
+    #[test]
+    fn registered_key_name_in_disclosure() {
+        let disclosure = Disclosure::new(String::new(), Some("vct".into()), "hidden_vct".into());
+        let hash = calculate_digest(&disclosure);
+        let payload = into_object(json!({
+            "_sd": [hash]
+        }));
+        let disclosures = &[disclosure];
+
+        let invalid_recreate = decode_disclosed_claims(&payload, disclosures, dummy_hasher_factory);
+
+        assert_eq!(
+            invalid_recreate.unwrap_err().error,
+            DecodingError::RegisteredKeyNameInDisclosure("vct")
+        );
+
+        // Nesting claims with registered names is OK, as they are unrelated to registered claims
+        let nested_disclosure =
+            Disclosure::new(String::new(), Some("vct".into()), "nested_vct".into());
+        let top_level_disclosure = Disclosure::new(
+            String::new(),
+            Some("nested".into()),
+            json!({
+                "_sd": [calculate_digest(&nested_disclosure)],
+                "exp": 1883000000,
+            }),
+        );
+        let payload = into_object(json!({
+            "_sd": [calculate_digest(&top_level_disclosure)]
+        }));
+        let disclosures = &[top_level_disclosure, nested_disclosure];
+
+        let (claims, _, _) =
+            decode_disclosed_claims(&payload, disclosures, dummy_hasher_factory).unwrap();
+
+        assert_eq!(
+            claims,
+            json_object!({
+                "nested": {
+                    "exp": 1883000000,
+                    "vct": "nested_vct",
+                }
+            })
         );
     }
 

@@ -92,7 +92,7 @@ impl<H: Hasher> Issuer<H> {
     ) -> Result<IssuedSdJwt> {
         // TODO(issues/49) be careful to match hasher collision resistance to the signing algorithm
 
-        // https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-03#name-registered-jwt-claims
+        // https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-19#name-registered-jwt-claims
         check_registered_path_in_paths(disclosure_paths)?;
 
         // set the `sd_alg` field to the appropriate value
@@ -129,7 +129,7 @@ impl<H: Hasher> Issuer<H> {
 }
 
 /// Check if some `path` in provided array of `paths` is leading to a registered
-/// claim which should not be disclosable.
+/// claim which should not be selectively disclosable.
 ///
 /// Note: it does not check if `paths` contains a `path` whose segment is registered
 /// claim (e.g. `iss.address`), if this path exists, then the claims object is not a
@@ -251,10 +251,10 @@ lazy_static::lazy_static! {
     /// Claim names registered for use with SD-JWT VCs, with defined semantics.
     /// These are **NOT** selectively disclosable!
     ///
-    /// See the [SD-JWT VC draft](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-01#section-3.2.2.2).
+    /// See the [SD-JWT VC draft](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-19#section-2.2.2.3-2).
     ///
     pub(crate) static ref REGISTERED_CLAIM_NAMES: HashSet<&'static str> = {
-        ["iss", "nbf", "exp", "cnf", "vct", "status"].into_iter().collect()
+        ["iss", "nbf", "exp", "cnf", "vct", "vct#integrity", "aka_vcts", "status"].into_iter().collect()
     };
 }
 
