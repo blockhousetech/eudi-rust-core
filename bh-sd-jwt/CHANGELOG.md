@@ -12,6 +12,12 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 - Claim `iss` is now OPTIONAL, as specified by latest current draft 19.
 
+### Fixed
+
+- When parsing, disclosures containing non-selectively-disclosable registered
+  JWT claims at the top level are rejected.
+- The set of non-selectively-disclosable registered JWT claims is updated to draft 19.
+
 ## [0.6.2] - 2026-09-09
 
 ### Added
