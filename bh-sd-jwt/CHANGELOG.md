@@ -8,6 +8,11 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Reject Key Binding JWTs whose issuance time differs from the verifier's
+  current time by more than five minutes, in either direction.
+
 ## [0.7.0] - 2026-10-21
 
 ### Changed

@@ -320,8 +320,8 @@ impl KBJwt<jwt::token::Verified> {
     ) -> Result<(), KBError> {
         let claims = self.claims();
 
-        // check that `iat` >= `current_time` - `KB_JWT_EXPIRATION_OFFSET`
-        if claims.iat + KB_JWT_EXPIRATION_OFFSET < current_time {
+        // check that `iat` is within the acceptable time window
+        if claims.iat.abs_diff(current_time) > KB_JWT_EXPIRATION_OFFSET {
             return Err(Error::root(KBError::KBJwtExpired(
                 claims.iat,
                 KB_JWT_EXPIRATION_OFFSET,
@@ -481,4 +481,85 @@ fn sd_hash(sd_jwt: &SdJwt, hasher: impl Hasher) -> String {
     utils::base64_url_digest(sd_hash_payload(sd_jwt).as_bytes(), hasher)
 }
 
-// TODO(issues/52) unit tests
+// TODO(issues/52): add extensive unit tests
+
+#[cfg(test)]
+mod tests {
+    use bh_jws_utils::Signer as _;
+
+    use super::*;
+    use crate::test_utils::{
+        dummy_key_binding_challenge,
+        symbolic_crypto::{StubSigner, StubVerifier},
+    };
+
+    fn validate_iat(
+        iat: SecondsSinceEpoch,
+        current_time: SecondsSinceEpoch,
+    ) -> Result<(), KBError> {
+        let challenge = dummy_key_binding_challenge();
+        let sd_hash = "test-sd-hash";
+        let claims = KBJwtClaims::new(challenge.clone(), iat, sd_hash.to_owned());
+        let signer = StubSigner::default();
+        let kb_jwt = KBJwt::new(claims, &signer).unwrap().into_string();
+        let verifier = StubVerifier::default();
+
+        let _verified = KBJwt::validate(
+            &kb_jwt,
+            &signer.public_jwk().unwrap(),
+            |_| Some(&verifier),
+            &challenge,
+            current_time,
+            sd_hash,
+        )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn iat_within_time_window_is_accepted() {
+        const CURRENT_TIME: SecondsSinceEpoch = 1_000;
+
+        for iat in [
+            CURRENT_TIME - KB_JWT_EXPIRATION_OFFSET,
+            CURRENT_TIME - KB_JWT_EXPIRATION_OFFSET + 1,
+            CURRENT_TIME,
+            CURRENT_TIME + KB_JWT_EXPIRATION_OFFSET - 1,
+            CURRENT_TIME + KB_JWT_EXPIRATION_OFFSET,
+        ] {
+            validate_iat(iat, CURRENT_TIME).unwrap()
+        }
+    }
+
+    #[test]
+    fn iat_too_far_in_past_is_rejected() {
+        const CURRENT_TIME: SecondsSinceEpoch = 1_000_000_000;
+        const TEN_YEARS: SecondsSinceEpoch = 10 * 365 * 24 * 60 * 60;
+
+        for iat in [
+            CURRENT_TIME - KB_JWT_EXPIRATION_OFFSET - 1,
+            CURRENT_TIME - TEN_YEARS,
+        ] {
+            assert_eq!(
+                validate_iat(iat, CURRENT_TIME).unwrap_err().error,
+                KBError::KBJwtExpired(iat, KB_JWT_EXPIRATION_OFFSET, CURRENT_TIME)
+            );
+        }
+    }
+
+    #[test]
+    fn iat_too_far_in_future_is_rejected() {
+        const CURRENT_TIME: SecondsSinceEpoch = 1_000_000_000;
+        const TEN_YEARS: SecondsSinceEpoch = 10 * 365 * 24 * 60 * 60;
+
+        for iat in [
+            CURRENT_TIME + KB_JWT_EXPIRATION_OFFSET + 1,
+            CURRENT_TIME + TEN_YEARS,
+        ] {
+            assert_eq!(
+                validate_iat(iat, CURRENT_TIME).unwrap_err().error,
+                KBError::KBJwtExpired(iat, KB_JWT_EXPIRATION_OFFSET, CURRENT_TIME)
+            );
+        }
+    }
+}
