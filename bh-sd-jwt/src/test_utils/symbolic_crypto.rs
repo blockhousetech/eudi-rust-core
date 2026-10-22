@@ -121,7 +121,7 @@ impl jwt::VerifyingAlgorithm for StubVerifier {
         header: &str,
         claims: &str,
         signature: &[u8],
-    ) -> std::result::Result<bool, jwt::Error> {
+    ) -> Result<bool, jwt::Error> {
         let message = bh_jws_utils::construct_jws_payload(header, claims);
         let success = <Self as SignatureVerifier>::verify(
             self,

@@ -62,7 +62,7 @@ impl HashingAlgorithm {
 }
 
 impl FromStr for HashingAlgorithm {
-    type Err = bherror::Error<DecodingError>;
+    type Err = Error<DecodingError>;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {

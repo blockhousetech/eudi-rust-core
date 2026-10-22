@@ -195,7 +195,7 @@ impl crate::SdJwt {
         // `SdJwt` takes ownership over the string it is parsed from, which is
         // why this whole fn exists as a `&self` method on `SdJwt` rather than a
         // `from_str` method on `IssuedSdJwtUnverified` so that the jwt string
-        // remains on the stack when calling this whole fn. Prehaps this could be
+        // remains on the stack when calling this whole fn. Perhaps this could be
         // fixed by making `SdJwt` generic over ownership/borrowing (e.g. via `Cow`)?
         let jwt =
             jwt::Token::parse_unverified(&self.jwt).foreign_err(|| FormatError::NonParseableJwt)?;
