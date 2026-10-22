@@ -225,7 +225,7 @@ impl Holder {
     /// Refer to the documentation of [`Holder::verify_issued`] for the meaning of the arguments.
     ///
     /// If there were unrecoverable and essential errors with the held SD-JWT, `Err(_)` is returned.
-    /// Otherwise, `Ok(_)` is returned, with the following semnatics:
+    /// Otherwise, `Ok(_)` is returned, with the following semantics:
     ///
     /// - If the credential was fully valid, [`VerifyHeldResult::Holder`] is returned;
     ///
@@ -257,7 +257,7 @@ impl Holder {
                 // TODO better distinguish public key lookup failures - some may be
                 // revocations, some may be retryable (e.g. network error)
                 HolderError::JwtExpired(..)
-                | HolderError::Signature(crate::SignatureError::PublicKeyLookupFailed) => {
+                | HolderError::Signature(SignatureError::PublicKeyLookupFailed) => {
                     Ok(VerifyHeldResult::Invalid { error })
                 }
                 _ => Err(error),
@@ -641,7 +641,7 @@ pub(crate) mod tests {
             }
             .unwrap();
             assert!(matches!(lookup_failed, VerifyHeldResult::Invalid { error }
-                if error.error == HolderError::Signature(crate::SignatureError::PublicKeyLookupFailed)
+                if error.error == HolderError::Signature(SignatureError::PublicKeyLookupFailed)
             ));
 
             let _garbage_sd_jwt = call_verify_held("garbage sd-jwt", EXP - 1).unwrap_err();

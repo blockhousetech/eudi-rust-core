@@ -75,8 +75,8 @@ pub(crate) fn failing_public_key_lookup() -> impl IssuerPublicKeyLookup {
         async fn lookup(
             &self,
             _alleged_iss: Option<&str>,
-            _header: &crate::IssuerJwtHeader,
-        ) -> std::result::Result<bh_jws_utils::JwkPublic, Error<Self::Err>> {
+            _header: &IssuerJwtHeader,
+        ) -> Result<JwkPublic, Error<Self::Err>> {
             Err(Error::root(SignatureError::PublicKeyLookupFailed))
         }
     }

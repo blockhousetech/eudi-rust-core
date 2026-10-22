@@ -40,7 +40,7 @@ type PathMapArray<'a> = path_map::PathMapArray<&'a Disclosure>;
 /// # Complexity
 ///
 /// This recreates a copy of the provided `claims` [JsonObject] with the disclosed disclosures by
-/// traversing the whole `claims` object recursivley.
+/// traversing the whole `claims` object recursively.
 ///
 /// # Notes
 ///
@@ -868,7 +868,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn malfored_digest_in_array_contains_multiple_digests() {
+    fn malformed_digest_in_array_contains_multiple_digests() {
         let payload = into_object(json!({
             "address": [
                 {"..." : ["digest1", "digest2"]}

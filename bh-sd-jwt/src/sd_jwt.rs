@@ -66,10 +66,7 @@ impl SdJwtKB {
     /// The function only check if key binding is not empty. No other checks
     /// are carried out on any of the provided parts, e.g. there is not a
     /// check on the `jwt` signature.
-    pub(crate) fn new(
-        sd_jwt: SdJwt,
-        key_binding_jwt: String,
-    ) -> Result<Self, bherror::Error<FormatError>> {
+    pub(crate) fn new(sd_jwt: SdJwt, key_binding_jwt: String) -> Result<Self, Error<FormatError>> {
         if key_binding_jwt.is_empty() {
             return Err(Error::root(FormatError::InvalidSdJwtFormat));
         }
@@ -86,7 +83,7 @@ impl SdJwtKB {
 }
 
 impl std::str::FromStr for SdJwt {
-    type Err = bherror::Error<FormatError>;
+    type Err = Error<FormatError>;
 
     /// Create a new instance of an [`SdJwt`], from the provided string in the
     /// JWS Compact Serialization format.
@@ -124,7 +121,7 @@ impl std::str::FromStr for SdJwt {
 }
 
 impl std::str::FromStr for SdJwtKB {
-    type Err = bherror::Error<FormatError>;
+    type Err = Error<FormatError>;
 
     /// Create a new instance of an [`SdJwtKB`], from the provided string in the
     /// JWS Compact Serialization format.
@@ -207,7 +204,7 @@ impl std::fmt::Display for SdJwtKB {
     }
 }
 
-fn sd_jwt_from_parts(sd_jwt_parts: &[&str]) -> Result<SdJwt, bherror::Error<FormatError>> {
+fn sd_jwt_from_parts(sd_jwt_parts: &[&str]) -> Result<SdJwt, Error<FormatError>> {
     let sd_jwt_parts = sd_jwt_parts.split_first();
     let Some((jwt, disclosures)) = sd_jwt_parts else {
         return Err(Error::root(FormatError::InvalidSdJwtFormat));

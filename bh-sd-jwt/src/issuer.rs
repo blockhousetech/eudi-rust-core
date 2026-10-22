@@ -134,7 +134,7 @@ impl<H: Hasher> Issuer<H> {
 /// Note: it does not check if `paths` contains a `path` whose segment is registered
 /// claim (e.g. `iss.address`), if this path exists, then the claims object is not a
 /// valid one and this is checked in `IssuerJwt::new` function
-fn check_registered_path_in_paths(paths: &[&[crate::JsonNodePathSegment]]) -> Result<()> {
+fn check_registered_path_in_paths(paths: &[&[JsonNodePathSegment]]) -> Result<()> {
     for path in paths {
         if let [JsonNodePathSegment::Key(key)] = path {
             if let Some(name) = REGISTERED_CLAIM_NAMES.iter().find(|&name| name.eq(key)) {
@@ -263,7 +263,7 @@ impl IssuerJwt {
     /// [interoperability profile].
     ///
     /// Providing `holder_binding_public_jwk` as Some(_) creates a
-    /// registered claim `cnf` identifying the proof of possesion key.
+    /// registered claim `cnf` identifying the proof of possession key.
     /// See [SD-JWT-VC-cnf].
     ///
     /// Note: `claims` should not contain any registered claim name (_`iss`_,
@@ -283,9 +283,9 @@ impl IssuerJwt {
             &|claim| REGISTERED_CLAIM_NAMES.get(claim).copied(),
             false,
         ) {
-            return Err(bherror::Error::root(
-                IssuerError::ReservedOrRegisteredClaimName(name),
-            ));
+            return Err(Error::root(IssuerError::ReservedOrRegisteredClaimName(
+                name,
+            )));
         }
 
         let cnf = holder_binding_public_jwk.map(|jwk| CnfClaim { jwk });
@@ -766,7 +766,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn cnf_null_valus_is_invalid() {
+    fn cnf_null_value_is_invalid() {
         let jwt = IssuerJwt::new(
             "TestCredential".into(),
             Some(dummy_https_iss()),
@@ -779,7 +779,7 @@ pub(crate) mod tests {
         serialized
             .as_object_mut()
             .unwrap()
-            .insert("cnf".to_owned(), serde_json::Value::Null);
+            .insert("cnf".to_owned(), Value::Null);
 
         let result = serde_json::from_value::<IssuerJwt>(serialized);
         assert!(result.is_err());

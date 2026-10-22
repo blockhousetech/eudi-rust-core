@@ -157,10 +157,7 @@ pub trait HttpGetClient: Sync {
     ///
     /// Note: Return type of request is currently hardcoded. This is subject to change in the future.
     // TODO(issues/53)
-    fn get(
-        &self,
-        url: &str,
-    ) -> impl Future<Output = std::result::Result<reqwest::Response, Self::Err>> + Send;
+    fn get(&self, url: &str) -> impl Future<Output = Result<reqwest::Response, Self::Err>> + Send;
 }
 
 /// [`HttpGetClient`] implementation using the [`reqwest`] crate.
@@ -345,7 +342,7 @@ fn check_valid_iss(alleged_iss: &Uri) -> Result<(), Error<LookupError>> {
 }
 
 /// <https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-03#section-5-2>
-pub fn metadata_uri_from_iss(alleged_iss: &Uri) -> iref::uri::UriBuf {
+pub fn metadata_uri_from_iss(alleged_iss: &Uri) -> UriBuf {
     alleged_iss
         .add_path_prefix(ISSUER_METADATA_URL_SUFFIX)
         .expect("`ISSUER_METADATA_URL_SUFFIX` must be valid")

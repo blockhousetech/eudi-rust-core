@@ -239,7 +239,7 @@ impl NoHolderBindingVerifier {
     /// of the SD-JWT Issuer in the JWK format.
     ///
     /// This function does not check cryptographic Holder Key Binding and therefore does not prove:
-    ///     - possesion by the intended Holder,
+    ///     - possession by the intended Holder,
     ///     - presentation freshness,
     ///     - replay resistance.
     ///
