@@ -22,7 +22,7 @@ use rand::Rng;
 
 use crate::{
     models::{
-        data_retrieval::{device_retrieval::response::Document, Claims},
+        data_retrieval::{common::DocType, device_retrieval::response::Document, Claims},
         DeviceResponse,
     },
     utils::rand::generate_nonce,
@@ -40,6 +40,9 @@ pub struct Verifier {
 #[derive(Debug, PartialEq)]
 #[non_exhaustive]
 pub struct VerifiedClaims {
+    /// The document type of the credential.
+    pub doc_type: DocType,
+
     /// The actual claims of the credential.
     pub claims: Claims,
 
@@ -144,6 +147,7 @@ impl Verifier {
         document.validate(current_time)?;
 
         Ok(VerifiedClaims {
+            doc_type: document.doc_type().clone(),
             status: document.status()?,
             claims: document.into_claims(),
         })
@@ -158,7 +162,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        models::mdl::MDL_NAMESPACE,
+        models::mdl::{MDL_DOCUMENT_TYPE, MDL_NAMESPACE},
         utils::test::{issuer_x509_trust, present_dummy_mdoc},
     };
 
@@ -173,6 +177,7 @@ mod tests {
         let device_response = present_dummy_mdoc(100, None, None);
 
         let expected_claims = vec![VerifiedClaims {
+            doc_type: MDL_DOCUMENT_TYPE.into(),
             claims: Claims(HashMap::from([(
                 MDL_NAMESPACE.into(),
                 HashMap::from([("lastName".into(), "Doe".into())]),
@@ -224,6 +229,7 @@ mod tests {
         let device_response = present_dummy_mdoc(100, None, None);
 
         let expected_claims = vec![VerifiedClaims {
+            doc_type: MDL_DOCUMENT_TYPE.into(),
             claims: Claims(HashMap::from([(
                 MDL_NAMESPACE.into(),
                 HashMap::from([("lastName".into(), "Doe".into())]),
@@ -257,6 +263,7 @@ mod tests {
         );
 
         let expected_claims = vec![VerifiedClaims {
+            doc_type: MDL_DOCUMENT_TYPE.into(),
             claims: Claims(HashMap::from([(
                 MDL_NAMESPACE.into(),
                 HashMap::from([("lastName".into(), "Doe".into())]),
@@ -294,6 +301,7 @@ mod tests {
         let device_response = present_dummy_mdoc(100, None, Some(jwk_public));
 
         let expected_claims = vec![VerifiedClaims {
+            doc_type: MDL_DOCUMENT_TYPE.into(),
             claims: Claims(HashMap::from([(
                 MDL_NAMESPACE.into(),
                 HashMap::from([("lastName".into(), "Doe".into())]),
