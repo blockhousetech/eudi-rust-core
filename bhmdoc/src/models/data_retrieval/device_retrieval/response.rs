@@ -189,6 +189,11 @@ impl Document {
             .ctx(|| "device signature")
     }
 
+    /// Returns the document type of the credential.
+    pub fn doc_type(&self) -> &DocType {
+        &self.doc_type
+    }
+
     /// Get the pointer to the credential's status.
     ///
     /// For more information, take a look at the [Token Status List (TSL)][1].

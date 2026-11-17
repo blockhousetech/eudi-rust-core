@@ -8,6 +8,12 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- The `doc_type` field on `VerifiedClaims`, exposing the verified credential's
+  document type.
+- The `Document::doc_type` method for accessing the credential's document type.
+
 ## [0.6.3] - 2026-05-14
 
 ### Added
