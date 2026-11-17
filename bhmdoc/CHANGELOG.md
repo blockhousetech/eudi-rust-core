@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-17
+
 ### Added
 
 - The `doc_type` field on `VerifiedClaims`, exposing the verified credential's
@@ -122,7 +124,8 @@ the Issuer.
 - README.md describing the crate.
 - Initial version of the `bhmdoc` crate.
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhmdoc/v0.6.3...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bhmdoc/v0.6.4...HEAD>
+[0.6.4]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.6.4>
 [0.6.3]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.6.3>
 [0.6.2]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.6.2>
 [0.6.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bhmdoc/v0.6.1>
