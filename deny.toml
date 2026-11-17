@@ -37,6 +37,8 @@ yanked = "deny"
 ignore = [
     # unmaintained
     "RUSTSEC-2024-0370", # `proc-macro-error`, possibly introduced by `iref v3.2.2`
+    "RUSTSEC-2026-0543", # `chrono` is unmaintained
+    "RUSTSEC-2016-0007", # `jwt` is unmaintained
 ]
 
 [bans]
