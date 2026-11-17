@@ -212,11 +212,8 @@ impl SignatureVerifier for Es256Verifier {
         let digest = sha256(message);
 
         let valid_signature = ecdsa_sig.verify(&digest, public_key.as_ref())?;
-        if !valid_signature {
-            return Ok(false);
-        }
 
-        Ok(true)
+        Ok(valid_signature)
     }
 }
 
