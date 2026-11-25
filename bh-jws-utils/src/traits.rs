@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use bherror::Error;
 use bhx5chain::X5Chain;
@@ -133,6 +133,9 @@ impl From<SigningAlgorithm> for jwt::AlgorithmType {
 }
 
 /// An external signing backend, to be used for computing a JWS signature.
+///
+/// Shared and mutable references, [`Box`], and [`Arc`] forward this trait and
+/// its metadata subtraits to the underlying signer.
 ///
 /// # Algorithms
 ///
@@ -255,9 +258,107 @@ impl<V: SignatureVerifier + ?Sized> JwtVerifier for V {
     }
 }
 
+macro_rules! forward_pointer_traits {
+    ($target:ident, $pointer:ty $(, $verifier_bound:path)?) => {
+        impl<$target: Signer + ?Sized> Signer for $pointer {
+            fn algorithm(&self) -> SigningAlgorithm {
+                <$target as Signer>::algorithm(&**self)
+            }
+
+            fn sign(&self, message: &[u8]) -> Result<Vec<u8>, BoxError> {
+                <$target as Signer>::sign(&**self, message)
+            }
+
+            fn public_jwk(&self) -> Result<JwkPublic, BoxError> {
+                <$target as Signer>::public_jwk(&**self)
+            }
+        }
+
+        impl<$target: HasJwkKid + ?Sized> HasJwkKid for $pointer {
+            fn jwk_kid(&self) -> &str {
+                <$target as HasJwkKid>::jwk_kid(&**self)
+            }
+        }
+
+        impl<$target: HasX5Chain + ?Sized> HasX5Chain for $pointer {
+            fn x5chain(&self) -> X5Chain {
+                <$target as HasX5Chain>::x5chain(&**self)
+            }
+        }
+
+        impl<$target: SignatureVerifier + ?Sized $(+ $verifier_bound)?> SignatureVerifier
+            for $pointer
+        {
+            fn algorithm(&self) -> SigningAlgorithm {
+                <$target as SignatureVerifier>::algorithm(&**self)
+            }
+
+            fn verify(
+                &self,
+                message: &[u8],
+                signature: &[u8],
+                public_key: &JwkPublic,
+            ) -> Result<bool, BoxError> {
+                <$target as SignatureVerifier>::verify(&**self, message, signature, public_key)
+            }
+        }
+    };
+}
+
+forward_pointer_traits!(T, &T);
+forward_pointer_traits!(T, &mut T);
+forward_pointer_traits!(T, Box<T>);
+// `Arc<T>` requires both `Send` and `Sync` to satisfy `SignatureVerifier: Sync`.
+forward_pointer_traits!(T, Arc<T>, Send);
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    use crate::{Es256Signer, Es256SignerWithChain, Es256Verifier};
+
+    trait TestSigner: HasJwkKid + HasX5Chain {}
+
+    #[test]
+    fn signer_pointers_implement_traits() {
+        fn assert_impl<T: Signer + HasJwkKid + HasX5Chain + JwtSigner>() {}
+        fn assert_value<T: Signer + HasJwkKid + HasX5Chain + JwtSigner>(_: &T) {}
+
+        assert_impl::<Arc<dyn TestSigner>>();
+        assert_impl::<Box<dyn TestSigner>>();
+        assert_impl::<&dyn TestSigner>();
+        assert_impl::<&mut dyn TestSigner>();
+
+        let signer = Es256Signer::generate("test-key".into()).unwrap();
+        let chain = bhx5chain::Builder::dummy()
+            .generate_x5chain(&signer.public_key_pem().unwrap(), None)
+            .unwrap();
+        let mut signer = Es256SignerWithChain::new(signer, chain).unwrap();
+
+        assert_value(&&signer);
+        assert_value(&&mut signer);
+        let signer = Box::new(signer);
+        assert_value(&signer);
+        let signer: Arc<Es256SignerWithChain> = signer.into();
+        assert_value(&signer);
+    }
+
+    #[test]
+    fn verifier_pointers_implement_traits() {
+        fn assert_impl<T: SignatureVerifier + JwtVerifier>() {}
+        fn assert_value<T: SignatureVerifier + JwtVerifier>(_: &T) {}
+
+        assert_impl::<Arc<dyn SignatureVerifier + Send>>();
+        assert_impl::<Box<dyn SignatureVerifier>>();
+        assert_impl::<&dyn SignatureVerifier>();
+        assert_impl::<&mut dyn SignatureVerifier>();
+
+        let mut verifier = Es256Verifier;
+        assert_value(&&verifier);
+        assert_value(&&mut verifier);
+        assert_value(&Box::new(Es256Verifier));
+        assert_value(&Arc::new(Es256Verifier));
+    }
 
     #[test]
     fn signing_algorithms_serialize_correctly() {

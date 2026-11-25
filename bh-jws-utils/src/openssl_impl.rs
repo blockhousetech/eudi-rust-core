@@ -135,7 +135,7 @@ impl Es256Signer {
     /// Note: It is expected JWK contains `kid` field.
     pub fn from_private_jwk(jwk_private: &EcJwkPrivate) -> Result<Self, FormatError> {
         let Some(kid) = jwk_private.jwk_public.get("kid").and_then(|v| v.as_str()) else {
-            return Err(bherror::Error::root(FormatError::JwkParsingFailed(
+            return Err(Error::root(FormatError::JwkParsingFailed(
                 "Missing `kid` field".to_string(),
             )));
         };
@@ -289,7 +289,7 @@ pub fn ec_public_affine_coords_to_jwk(
     });
 
     if let Some(kid) = kid {
-        jwk.insert("kid".to_owned(), serde_json::Value::String(kid.to_owned()));
+        jwk.insert("kid".to_owned(), Value::String(kid.to_owned()));
     }
 
     jwk
@@ -366,7 +366,7 @@ fn check_jwk_field(jwk: &JwkPublic, field: &str, expected_value: &str) -> Result
 }
 
 fn parse_256bit_bignum(jwk: &Map<String, Value>, field: &str) -> Result<BigNum, FormatError> {
-    let error = |message| bherror::Error::root(FormatError::JwkParsingFailed(message));
+    let error = |message| Error::root(FormatError::JwkParsingFailed(message));
 
     let base64_num = jwk
         .get(field)
