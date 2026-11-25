@@ -8,6 +8,12 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added forwarding implementations of `Signer`, `HasJwkKid`, `HasX5Chain`, and
+  `SignatureVerifier` for `&T`, `&mut T`, `Box<T>`, and `Arc<T>`, including trait
+  objects. Verification through `Arc<T>` additionally requires `T: Send`.
+
 ## [0.6.2] - 2026-02-24
 
 ### Added

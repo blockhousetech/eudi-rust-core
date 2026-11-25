@@ -155,7 +155,7 @@ struct JwkSetUnverified {
 impl TryFrom<JwkSetUnverified> for JwkSet {
     type Error = &'static str;
 
-    fn try_from(value: JwkSetUnverified) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: JwkSetUnverified) -> Result<Self, Self::Error> {
         let keys = value.keys;
         let jwk_with_kid_cnt = keys.iter().filter(|jwk| jwk.contains_key("kid")).count();
 
