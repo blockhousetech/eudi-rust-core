@@ -8,6 +8,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-26
+
 ### Added
 
 - Added forwarding implementations of `Signer`, `HasJwkKid`, `HasX5Chain`, and
@@ -113,7 +115,8 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 - README.md describing the crate.
 - Initial version of the `bh-jws-utils` crate.
 
-[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.6.2...HEAD>
+[Unreleased]: <https://github.com/blockhousetech/eudi-rust-core/compare/bh-jws-utils/v0.6.3...HEAD>
+[0.6.3]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.6.3>
 [0.6.2]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.6.2>
 [0.6.1]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.6.1>
 [0.6.0]: <https://github.com/blockhousetech/eudi-rust-core/releases/tag/bh-jws-utils/v0.6.0>
