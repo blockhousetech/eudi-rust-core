@@ -63,7 +63,7 @@ fn compress_deflate_zlib(payload: impl AsRef<[u8]>) -> std::io::Result<Vec<u8>> 
 
 /// Decompresses the given `payload` that was compressed using `DEFLATE` with
 /// the `ZLIB` data format.
-fn decompress_deflate_zlib(payload: impl AsRef<[u8]>) -> std::io::Result<Vec<u8>> {
+pub(crate) fn decompress_deflate_zlib(payload: impl AsRef<[u8]>) -> std::io::Result<Vec<u8>> {
     let mut d = ZlibDecoder::new(payload.as_ref());
     let mut decompressed = Vec::new();
     d.read_to_end(&mut decompressed)?;

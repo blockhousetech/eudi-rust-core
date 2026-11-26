@@ -15,6 +15,7 @@
 
 use bh_jws_utils::{jwt, JwkPublic, JwtSigner, JwtVerifier};
 use bherror::traits::{ForeignBoxed as _, ForeignError as _};
+use serde::de::DeserializeOwned;
 
 use crate::{token, Error, Result, StatusListTokenClaims, StatusListTokenHeader};
 
@@ -25,12 +26,14 @@ use crate::{token, Error, Result, StatusListTokenClaims, StatusListTokenHeader};
 /// If the signing of the token fails, the [`Error::TokenSigningFailed`] is
 /// returned.
 pub(crate) fn sign_jwt_token(
-    header: StatusListTokenHeader,
-    claims: StatusListTokenClaims,
+    header: &StatusListTokenHeader,
+    claims: &StatusListTokenClaims,
     key: &impl JwtSigner,
-) -> Result<jwt::Token<StatusListTokenHeader, StatusListTokenClaims, token::Signed>> {
-    key.sign_jwt(jwt::Token::new(header, claims))
-        .foreign_boxed_err(|| Error::TokenSigningFailed)
+) -> Result<String> {
+    let signed: jwt::Token<_, _, token::Signed> = key
+        .sign_jwt(jwt::Token::new(header, claims))
+        .foreign_boxed_err(|| Error::TokenSigningFailed)?;
+    Ok(signed.into())
 }
 
 /// Parses the given JWT `token` without verifying its signature.
@@ -38,29 +41,22 @@ pub(crate) fn sign_jwt_token(
 /// # Errors
 /// The function returns [`Error::TokenParsingFailed`] if it is unable to parse
 /// the JWT token.
-pub(crate) fn parse_jwt_token_unverified(
+pub(crate) fn parse_jwt_token_unverified<C: DeserializeOwned>(
     token: &str,
-) -> Result<jwt::Token<StatusListTokenHeader, StatusListTokenClaims, jwt::token::Unverified<'_>>> {
+) -> Result<jwt::Token<StatusListTokenHeader, C, jwt::token::Unverified<'_>>> {
     jwt::Token::parse_unverified(token).foreign_err(|| Error::TokenParsingFailed)
 }
 
-/// Verifies the signature of the given JWT `token`.
+/// Verifies the signature of a parsed JWT.
 ///
 /// # Errors
-/// The function returns the following errors:
-/// - [`Error::TokenParsingFailed`] if it is unable to parse the JWT token,
-/// - [`Error::TokenSignatureVerificationFailed`] if the signature of the JWT
-///   token is invalid.
-pub(crate) fn verify_jwt_token(
-    token: &str,
+/// Returns [`Error::TokenSignatureVerificationFailed`] on signature failure.
+pub(crate) fn verify_jwt_token<C>(
+    token: jwt::Token<StatusListTokenHeader, C, jwt::token::Unverified<'_>>,
     verifier: &(impl JwtVerifier + ?Sized),
     public_key: &JwkPublic,
-) -> Result<jwt::Token<StatusListTokenHeader, StatusListTokenClaims, token::Verified>> {
-    let unverified_token = parse_jwt_token_unverified(token)?;
-
-    // Verify the JWT signature.
-
+) -> Result<jwt::Token<StatusListTokenHeader, C, token::Verified>> {
     verifier
-        .verify_jwt_signature(unverified_token, public_key)
+        .verify_jwt_signature(token, public_key)
         .foreign_boxed_err(|| Error::TokenSignatureVerificationFailed)
 }

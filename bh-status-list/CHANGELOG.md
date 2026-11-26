@@ -8,6 +8,15 @@ Versioning](https://doc.rust-lang.org/cargo/reference/semver.html).
 
 ## [Unreleased]
 
+### Added
+
+- Verify signed CWT Status List Tokens and provide a shared parse-and-verify API for JWT and CWT.
+
+### Changed
+
+- Authenticate tokens before decompressing their status lists.
+- Validate expiration and not-before claims and reject out-of-bounds status references.
+
 ## [0.3.0] - 2026-04-14
 
 ### Changed

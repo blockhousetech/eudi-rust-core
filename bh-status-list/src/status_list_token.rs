@@ -13,15 +13,18 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use bh_jws_utils::{jwt, JwkPublic, JwtSigner, JwtVerifier, SigningAlgorithm};
+use bh_jws_utils::{jwt, JwkPublic, JwtSigner, JwtVerifier, SignatureVerifier, SigningAlgorithm};
+use bherror::traits::ForeignError as _;
 use bhx5chain::JwtX5Chain;
 use iref::Uri;
-use serde::{Deserialize, Serialize};
+use serde::{de::IgnoredAny, Deserialize, Serialize};
 
 use crate::{
+    status_list::EncodedStatusList,
     token,
     utils::jwt::{parse_jwt_token_unverified, sign_jwt_token, verify_jwt_token},
-    Error, Result, StatusList, UriBuf,
+    verified::{validate_numeric_dates, validate_optional_claims, validate_subject},
+    CwtStatusListToken, Error, Result, StatusList, StatusListResponse, UriBuf, VerifiedStatusList,
 };
 
 const STATUS_LIST_TOKEN_TYP: &str = "statuslist+jwt";
@@ -30,8 +33,12 @@ const STATUS_LIST_TOKEN_TYP: &str = "statuslist+jwt";
 ///
 /// More can be read [here][1].
 ///
-/// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-03#name-status-list-token
-pub struct StatusListToken<S>(jwt::Token<StatusListTokenHeader, StatusListTokenClaims, S>);
+/// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1
+pub struct StatusListToken<S> {
+    header: StatusListTokenHeader,
+    claims: StatusListTokenClaims,
+    signature: S,
+}
 
 impl StatusListToken<token::Signed> {
     /// Creates a new **SIGNED** `StatusListToken`.
@@ -63,16 +70,21 @@ impl StatusListToken<token::Signed> {
             kid,
             x5c,
             typ: STATUS_LIST_TOKEN_TYP.to_owned(),
+            crit: None,
+            b64: None,
         };
 
-        let signed_token = sign_jwt_token(header, claims, key)?;
-
-        Ok(Self(signed_token))
+        let token_string = sign_jwt_token(&header, &claims, key)?;
+        Ok(Self {
+            header,
+            claims,
+            signature: token::Signed { token_string },
+        })
     }
 
     /// Returns the [`StatusListToken`] token as a `&str`.
     pub fn as_str(&self) -> &str {
-        self.0.as_str()
+        &self.signature.token_string
     }
 }
 
@@ -84,14 +96,16 @@ impl std::fmt::Display for StatusListToken<token::Signed> {
 
 impl From<StatusListToken<token::Verified>> for (StatusListTokenHeader, StatusListTokenClaims) {
     fn from(token: StatusListToken<token::Verified>) -> Self {
-        token.0.into()
+        (token.header, token.claims)
     }
 }
 
 impl StatusListToken<token::Verified> {
-    /// Verifies a signed Status List Token.
+    /// Verifies a signed JWT Status List Token under an issuer-binding policy.
     ///
-    /// It verifies the signature of the JWT token and also its claims.
+    /// Use this when the token must name the credential issuer. For JWT or
+    /// CWT verification with an optional issuer, use
+    /// [`crate::StatusListResponse::verify`].
     ///
     /// The arguments are as follows:
     /// - `token`: the String representation of the JWT token,
@@ -114,8 +128,8 @@ impl StatusListToken<token::Verified> {
     ///   provided `iss` value,
     /// - [`Error::InvalidTokenSub`] if the `sub` claim is not equal to the
     ///   provided `sub` value,
-    /// - [`Error::TokenExpired`] if the token is expired based on the `exp`
-    ///   claim.
+    /// - [`Error::TokenExpired`] if the current time has reached `exp`,
+    /// - [`Error::TokenNotYetValid`] if the current time precedes `nbf`.
     pub fn verify(
         token: &str,
         verifier: &(impl JwtVerifier + ?Sized),
@@ -124,26 +138,52 @@ impl StatusListToken<token::Verified> {
         iss: &Uri,
         sub: &Uri,
     ) -> Result<Self> {
-        // Verify the JWT signature.
-        let verified_token = verify_jwt_token(token, verifier, public_key)?;
-
-        // Verify JWT header.
-        verified_token.header().verify()?;
-
-        // Verify JWT claims.
-        verified_token.claims().verify(current_time, iss, sub)?;
-
-        Ok(Self(verified_token))
+        let token = parse_jwt_token_unverified::<JwtClaims<u64>>(token)?;
+        let verified = verify_jwt_token(token, verifier, public_key)?;
+        let (header, claims) = verified.into();
+        header.verify()?;
+        let issuer = claims
+            .iss
+            .as_deref()
+            .ok_or_else(|| bherror::Error::root(Error::InvalidTokenClaims).ctx("missing issuer"))?
+            .parse::<UriBuf>()
+            .foreign_err(|| Error::InvalidTokenClaims)?;
+        if issuer.as_str() != iss.as_str() {
+            return Err(bherror::Error::root(Error::InvalidTokenIss(
+                iss.to_owned(),
+                issuer,
+            )));
+        }
+        claims.validate(sub)?;
+        if let Some(exp) = claims.exp.filter(|&exp| exp <= current_time) {
+            return Err(bherror::Error::root(Error::TokenExpired(current_time, exp)));
+        }
+        if claims.nbf.is_some_and(|nbf| nbf > current_time) {
+            return Err(bherror::Error::root(Error::TokenNotYetValid));
+        }
+        let claims = StatusListTokenClaims::new(
+            issuer,
+            claims.sub,
+            claims.iat,
+            claims.exp,
+            claims.ttl,
+            claims.status_list.decode()?,
+        );
+        Ok(Self {
+            header,
+            claims,
+            signature: token::Verified,
+        })
     }
 
     /// Returns the token header.
     pub fn header(&self) -> &StatusListTokenHeader {
-        self.0.header()
+        &self.header
     }
 
     /// Returns the token claims.
     pub fn claims(&self) -> &StatusListTokenClaims {
-        self.0.claims()
+        &self.claims
     }
 }
 
@@ -165,21 +205,25 @@ pub struct StatusListTokenHeader {
 
     /// Type of the JWT, which is always _`statuslist+jwt`_.
     pub typ: String,
+
+    #[serde(default, deserialize_with = "optional_claim", skip_serializing)]
+    crit: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "optional_claim", skip_serializing)]
+    b64: Option<bool>,
 }
 
 impl StatusListTokenHeader {
     /// Parses a Status List Token header without verifying the token
     /// signature.
     ///
-    /// The intended usage of this function is to call it before the `StatusListToken::verify`
-    /// function so that the caller can inspect the `kid` and `x5c` values from the header,
-    /// choose a public-key retrieval strategy, and then call the `verify` function with the
-    /// fetched key.
+    /// Use the `kid` and `x5c` values as key-resolution hints. Authorize the
+    /// resolved key for the credential's Status List before calling
+    /// [`StatusListToken::verify`] or [`crate::StatusListResponse::verify`].
     ///
     /// The header `typ` claim is still validated to ensure the token is a
     /// Status List Token.
     pub fn unverified_from_token(token: &str) -> Result<StatusListTokenHeader> {
-        let token = parse_jwt_token_unverified(token)?;
+        let token = parse_jwt_token_unverified::<IgnoredAny>(token)?;
 
         token.header().verify()?;
 
@@ -188,10 +232,6 @@ impl StatusListTokenHeader {
         Ok(header)
     }
 
-    /// Verifies the header of the Status List Token.
-    ///
-    /// The only step is checking if the `typ` claim is set to `statuslist+jwt`.
-    /// If not, [`Error::InvalidTokenHeaderTyp`] is returned.
     fn verify(&self) -> Result<()> {
         if self.typ != STATUS_LIST_TOKEN_TYP {
             return Err(bherror::Error::root(Error::InvalidTokenHeaderTyp(
@@ -199,6 +239,10 @@ impl StatusListTokenHeader {
             )));
         }
 
+        if self.crit.is_some() || self.b64.is_some() {
+            return Err(bherror::Error::root(Error::InvalidTokenHeader)
+                .ctx("unsupported JOSE critical header or payload encoding"));
+        }
         Ok(())
     }
 }
@@ -209,14 +253,20 @@ impl jwt::JoseHeader for StatusListTokenHeader {
     }
 }
 
+impl jwt::JoseHeader for &StatusListTokenHeader {
+    fn algorithm_type(&self) -> jwt::AlgorithmType {
+        jwt::JoseHeader::algorithm_type(*self)
+    }
+}
+
 /// Claims of the Status List Token in the JWT format.
 #[derive(Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct StatusListTokenClaims {
     /// A unique identifier of the Issuer of the Status List Token.
     ///
-    /// It **MUST** be the same as the `iss` claim value of the Verifiable
-    /// Credential itself.
+    /// The issuer-bound verification API requires this to equal the
+    /// credential's `iss` value.
     pub iss: UriBuf,
 
     /// The URI of the Status List Token.
@@ -263,8 +313,8 @@ impl StatusListTokenClaims {
     ///
     /// # Note
     ///
-    /// The `iss` value **MUST** be the same as the `iss` claim value of the
-    /// Verifiable Credentials whose `status` values are stored in the list.
+    /// Issuer-bound verification requires the `iss` value to match the
+    /// credential's issuer.
     ///
     /// The `sub` value **MUST** be equal to the `uri` claim in the `status`
     /// claim of the Verifiable Credentials whose `status` values are stored in
@@ -286,38 +336,139 @@ impl StatusListTokenClaims {
             status_list,
         }
     }
+}
 
-    /// Verifies claims of the Status List Token.
+#[derive(Deserialize)]
+struct JwtClaims<T> {
+    #[serde(default, deserialize_with = "optional_claim")]
+    iss: Option<String>,
+    sub: UriBuf,
+    iat: T,
+    #[serde(default, deserialize_with = "optional_claim")]
+    exp: Option<T>,
+    #[serde(default, deserialize_with = "optional_claim")]
+    nbf: Option<T>,
+    #[serde(default, deserialize_with = "optional_claim")]
+    ttl: Option<u64>,
+    #[serde(rename = "jti", default, deserialize_with = "optional_claim")]
+    _jwt_id: Option<String>,
+    #[serde(rename = "aud", default, deserialize_with = "claim_present")]
+    audience_present: bool,
+    status_list: EncodedStatusList,
+}
+
+fn optional_claim<'de, T: Deserialize<'de>, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<T>, D::Error> {
+    T::deserialize(deserializer).map(Some)
+}
+
+fn claim_present<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<bool, D::Error> {
+    IgnoredAny::deserialize(deserializer)?;
+    Ok(true)
+}
+
+impl<T> JwtClaims<T> {
+    fn validate(&self, sub: &Uri) -> Result<()> {
+        validate_subject(&self.sub, sub)?;
+        validate_optional_claims(self.iss.as_deref(), self.ttl, self.audience_present)
+    }
+}
+
+/// A parsed JWT or CWT Status List Token awaiting signature verification.
+///
+/// Use the header as a hint to resolve an authorized signing key. Then call
+/// [`Self::verify`] on the same token.
+pub struct UnverifiedStatusListToken<'a>(ParsedStatusListToken<'a>);
+
+enum ParsedStatusListToken<'a> {
+    Jwt(jwt::Token<StatusListTokenHeader, JwtClaims<f64>, jwt::token::Unverified<'a>>),
+    Cwt(CwtStatusListToken),
+}
+
+impl<'a> UnverifiedStatusListToken<'a> {
+    pub(crate) fn parse(response: &'a StatusListResponse) -> Result<Self> {
+        match response {
+            StatusListResponse::Jwt(token) => {
+                let token = parse_jwt_token_unverified(token)?;
+                token.header().verify()?;
+                Ok(Self(ParsedStatusListToken::Jwt(token)))
+            }
+            StatusListResponse::Cwt(token) => Ok(Self(ParsedStatusListToken::Cwt(
+                CwtStatusListToken::parse(token)?,
+            ))),
+        }
+    }
+
+    /// Returns the signature algorithm advertised by the token.
+    pub fn algorithm(&self) -> SigningAlgorithm {
+        match &self.0 {
+            ParsedStatusListToken::Jwt(token) => token.header().alg,
+            ParsedStatusListToken::Cwt(token) => token.algorithm(),
+        }
+    }
+
+    /// Returns the key ID as bytes, using UTF-8 for JWT key IDs.
+    pub fn key_id(&self) -> Option<&[u8]> {
+        match &self.0 {
+            ParsedStatusListToken::Jwt(token) => token.header().kid.as_deref().map(str::as_bytes),
+            ParsedStatusListToken::Cwt(token) => token.key_id(),
+        }
+    }
+
+    /// Returns the JWT header when the response carries a JWT.
     ///
-    /// The following verification steps are performed:
-    /// - `iss`: checks if the `iss` claim is equal to the provided `iss` value,
-    ///   and returns [`Error::InvalidTokenIss`] if not,
-    /// - `sub`: checks if the `sub` claim is equal to the provided `sub` value,
-    ///   and returns [`Error::InvalidTokenSub`] if not,
-    /// - `exp`: checks whether `exp` is in the past (token expired), and
-    ///   returns [`Error::TokenExpired`] if it is.
-    fn verify(&self, current_time: u64, iss: &Uri, sub: &Uri) -> Result<()> {
-        if self.iss != iss {
-            return Err(bherror::Error::root(Error::InvalidTokenIss(
-                iss.to_owned(),
-                self.iss.clone(),
-            )));
+    /// The header exposes the optional `x5c` certificate chain.
+    pub fn jwt_header(&self) -> Option<&StatusListTokenHeader> {
+        match &self.0 {
+            ParsedStatusListToken::Jwt(token) => Some(token.header()),
+            ParsedStatusListToken::Cwt(_) => None,
         }
+    }
 
-        if self.sub != sub {
-            return Err(bherror::Error::root(Error::InvalidTokenSub(
-                sub.to_owned(),
-                self.sub.clone(),
-            )));
+    /// Returns the parsed CWT when the response carries a CWT.
+    ///
+    /// Use [`CwtStatusListToken::x5chain`] to access any certificate bytes.
+    pub fn cwt_token(&self) -> Option<&CwtStatusListToken> {
+        match &self.0 {
+            ParsedStatusListToken::Jwt(_) => None,
+            ParsedStatusListToken::Cwt(token) => Some(token),
         }
+    }
 
-        if let Some(exp) = self.exp {
-            if exp < current_time {
-                return Err(bherror::Error::root(Error::TokenExpired(current_time, exp)));
+    /// Verifies this token against the list URI from the verified credential.
+    ///
+    /// Supply an authorized key, a verifier for an allowed algorithm, and
+    /// the current Unix time in seconds. See [`StatusListResponse::verify`]
+    /// for the shared verification rules.
+    pub fn verify(
+        self,
+        verifier: &(impl SignatureVerifier + ?Sized),
+        public_key: &JwkPublic,
+        current_time: u64,
+        uri: &Uri,
+    ) -> Result<VerifiedStatusList> {
+        match self.0 {
+            ParsedStatusListToken::Jwt(token) => {
+                let verified = verify_jwt_token(token, verifier, public_key)?;
+                let (_, claims) = verified.into();
+                claims.validate(uri)?;
+                validate_numeric_dates(current_time, claims.iat, claims.exp, claims.nbf)?;
+                Ok(VerifiedStatusList {
+                    iss: claims.iss,
+                    sub: claims.sub,
+                    iat: claims.iat,
+                    exp: claims.exp,
+                    ttl: claims.ttl,
+                    status_list: claims.status_list.decode()?,
+                })
+            }
+            ParsedStatusListToken::Cwt(token) => {
+                token.verify(verifier, public_key, current_time, uri)
             }
         }
-
-        Ok(())
     }
 }
 
@@ -570,11 +721,10 @@ mod tests {
             kid: Some("kid".to_owned()),
             x5c: None,
             typ: "not-status-list".to_owned(),
+            crit: None,
+            b64: None,
         };
-        let jwt = sign_jwt_token(header, claims, &DummySigner(Es256, true))
-            .unwrap()
-            .as_str()
-            .to_owned();
+        let jwt = sign_jwt_token(&header, &claims, &DummySigner(Es256, true)).unwrap();
 
         let err = StatusListTokenHeader::unverified_from_token(&jwt)
             .err()
@@ -715,5 +865,44 @@ mod tests {
         .unwrap();
 
         assert!(matches!(err.error, Error::TokenExpired(curr, exp) if curr == 300 && exp == 200));
+    }
+
+    #[test]
+    fn verifies_jwt_without_iss_and_rejects_expiration_boundary() {
+        use bh_jws_utils::{Es256Signer, Es256Verifier};
+        use serde_json::json;
+
+        let sub = str_to_uri("https://example.com/statuslists/1");
+        let claims = json!({
+            "sub": sub.as_str(),
+            "iat": 100,
+            "exp": 200,
+            "status_list": { "bits": 1, "lst": "eNrbuRgAAhcBXQ" },
+        });
+        let signer = Es256Signer::generate("test".into()).unwrap();
+        let key = signer.public_jwk().unwrap();
+        let header = StatusListTokenHeader {
+            alg: Es256,
+            kid: Some("test".into()),
+            x5c: None,
+            typ: STATUS_LIST_TOKEN_TYP.to_owned(),
+            crit: None,
+            b64: None,
+        };
+        let jwt: jwt::Token<_, _, token::Signed> =
+            signer.sign_jwt(jwt::Token::new(header, claims)).unwrap();
+        let response = crate::StatusListResponse::Jwt(jwt.into());
+        let token = response.parse().unwrap();
+        assert_eq!(token.algorithm(), Es256);
+        assert_eq!(token.key_id(), Some(b"test".as_slice()));
+        assert_eq!(token.jwt_header().unwrap().typ, STATUS_LIST_TOKEN_TYP);
+        assert!(token.cwt_token().is_none());
+        let verified = token.verify(&Es256Verifier, &key, 199, &sub).unwrap();
+        assert_eq!(verified.issuer(), None);
+        assert_eq!(verified.status_list().lst(), &[0xb9, 0xa3]);
+        let error = response
+            .verify(&Es256Verifier, &key, 200, &sub)
+            .unwrap_err();
+        assert!(matches!(error.error, Error::TokenExpired(200, 200)));
     }
 }

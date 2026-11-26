@@ -31,7 +31,7 @@ use crate::{
 ///
 /// More can be read [here][1].
 ///
-/// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-03#name-referenced-token
+/// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-6
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusClaim {
     /// Contents of the `status` claim.
@@ -75,10 +75,32 @@ impl StatusClaim {
         &self.status_list.uri
     }
 
-    /// Retrieves the Status List Token from the specified URI using the given
-    /// [`StatusListClient`], then verifies the token using the provided
-    /// [`SignatureVerifier`] and returns the status of the current Verifiable
-    /// Credential along with the [`StatusListTokenClaims`].
+    /// Fetches the referenced Status List Token for subsequent verification.
+    ///
+    /// Verify the credential carrying this reference before fetching the token.
+    /// This calls [`StatusListClient::get_status`] with [`Self::uri`]. The
+    /// response can be inspected for signing-key hints before calling
+    /// [`StatusListResponse::verify`].
+    pub async fn fetch<C, E>(&self, client: &C) -> Result<StatusListResponse>
+    where
+        E: BhError,
+        C: StatusListClient<Err = bherror::Error<E>>,
+    {
+        client
+            .get_status(self.uri())
+            .await
+            .with_err(|| Error::UnsuccessfulStatusFetch(self.uri().clone()))
+    }
+
+    /// Fetches and verifies an issuer-bound JWT Status List Token.
+    ///
+    /// Supply the authorized signing key before fetching. The JWT must name
+    /// `iss` as its issuer. Returns the verified JWT claims and the raw
+    /// credential status, in that order.
+    ///
+    /// To resolve a key after fetching or to handle either format, use
+    /// [`Self::fetch`], [`StatusListResponse::verify`], and
+    /// [`crate::VerifiedStatusList::status`].
     pub async fn evaluate<C, E>(
         &self,
         client: &C,
@@ -91,25 +113,16 @@ impl StatusClaim {
         E: BhError,
         C: StatusListClient<Err = bherror::Error<E>>,
     {
-        let uri = self.uri();
-        let idx = self.idx() as usize;
-
-        let response = client
-            .get_status(uri)
-            .await
-            .with_err(|| Error::UnsuccessfulStatusFetch(uri.clone()))?;
-
-        let StatusListResponse::Jwt(token) = response;
-
+        let StatusListResponse::Jwt(token) = self.fetch(client).await? else {
+            return Err(bherror::Error::root(Error::TokenParsingFailed)
+                .ctx("expected an issuer-bound JWT Status List Token"));
+        };
         let verified =
-            StatusListToken::verify(&token, verifier, public_key, current_time, iss, uri)?;
+            StatusListToken::verify(&token, verifier, public_key, current_time, iss, self.uri())?;
 
         let (_, claims) = verified.into();
 
-        let status = claims
-            .status_list
-            .get(idx)
-            .ok_or_else(|| bherror::Error::root(Error::IndexOutOfBounds(idx, idx)))?;
+        let status = claims.status_list.status_at(self.idx())?;
 
         Ok((claims, status))
     }
