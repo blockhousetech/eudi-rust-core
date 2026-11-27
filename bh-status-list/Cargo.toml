@@ -15,6 +15,7 @@ base64 = "0.22"
 bh-jws-utils = "0.6"
 bherror = "0.1"
 bhx5chain = "0.3"
+coset = { version = "0.3", features = ["std"] }
 flate2 = "1.0"
 iref = { version = "3.2", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }

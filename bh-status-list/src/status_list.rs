@@ -13,12 +13,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use bherror::traits::ForeignError as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::{
     utils::{
         byte_and_inner_idx, check_status_against_bits, compress_and_encode, decode_and_decompress,
+        decompress_deflate_zlib, statuses_per_byte,
     },
     Error, Result, UriBuf,
 };
@@ -125,6 +127,24 @@ pub struct StatusList {
     /// [1]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-03#name-status-list-aggregation
     #[serde(skip_serializing_if = "Option::is_none")]
     aggregation_uri: Option<UriBuf>,
+}
+
+/// JWT list fields retained in their encoded form until signature verification.
+#[derive(Deserialize)]
+pub(crate) struct EncodedStatusList {
+    bits: StatusBits,
+    lst: String,
+    aggregation_uri: Option<UriBuf>,
+}
+
+impl EncodedStatusList {
+    pub(crate) fn decode(self) -> Result<StatusList> {
+        Ok(StatusList {
+            bits: self.bits,
+            lst: decode_and_decompress(self.lst)?,
+            aggregation_uri: self.aggregation_uri,
+        })
+    }
 }
 
 fn serialize_lst<S: Serializer>(lst: &[u8], s: S) -> std::result::Result<S::Ok, S::Error> {
@@ -324,6 +344,32 @@ impl StatusListInternal {
 }
 
 impl StatusList {
+    /// Builds a list from the compressed bytes carried directly in a CWT.
+    pub(crate) fn from_compressed(
+        bits: StatusBits,
+        lst: impl AsRef<[u8]>,
+        aggregation_uri: Option<UriBuf>,
+    ) -> Result<Self> {
+        Ok(Self {
+            bits,
+            lst: decompress_deflate_zlib(lst).foreign_err(|| Error::Decompression)?,
+            aggregation_uri,
+        })
+    }
+
+    /// Resolves a credential's wire index and reports an out-of-bounds error.
+    pub(crate) fn status_at(&self, index: u64) -> Result<u8> {
+        let index = usize::try_from(index)
+            .map_err(|_| bherror::Error::root(Error::IndexTooLarge(index)))?;
+        self.get(index).ok_or_else(|| {
+            let size = self
+                .lst
+                .len()
+                .saturating_mul(statuses_per_byte(self.bits).into());
+            bherror::Error::root(Error::IndexOutOfBounds(size, index))
+        })
+    }
+
     /// Gets the number of bits of each status in the list.
     pub fn bits(&self) -> StatusBits {
         self.bits

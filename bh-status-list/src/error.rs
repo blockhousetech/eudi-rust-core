@@ -38,6 +38,10 @@ pub enum Error {
     #[strum(to_string = "index={1} is out of bounds (size={0})")]
     IndexOutOfBounds(usize, usize),
 
+    /// The index cannot be represented on this platform.
+    #[strum(to_string = "Status List index {0} exceeds the platform index range")]
+    IndexTooLarge(u64),
+
     /// Error when token signing fails.
     #[strum(to_string = "Unable to sign Status List Token")]
     TokenSigningFailed,
@@ -53,6 +57,18 @@ pub enum Error {
     /// Error when the token header `typ` value is invalid.
     #[strum(to_string = "JWT header `typ` MUST be \"statuslist+jwt\", but is \"{0}\"")]
     InvalidTokenHeaderTyp(String),
+
+    /// Error when a JOSE or COSE header is invalid or unsupported.
+    #[strum(to_string = "Invalid or unsupported Status List Token header")]
+    InvalidTokenHeader,
+
+    /// Error when a required claim is absent or a claim is invalid.
+    #[strum(to_string = "Invalid Status List Token claims")]
+    InvalidTokenClaims,
+
+    /// Error when the token is not yet valid.
+    #[strum(to_string = "Status List Token is not yet valid")]
+    TokenNotYetValid,
 
     /// Error when the token `iss` value is invalid.
     #[strum(to_string = "The `iss` value ({1}) MUST be the same as in the issued VC ({0})")]
